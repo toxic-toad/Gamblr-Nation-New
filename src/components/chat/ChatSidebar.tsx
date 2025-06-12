@@ -55,13 +55,22 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
   const [isRulesOpen, setIsRulesOpen] = useState(false);
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [lastMessageTime, setLastMessageTime] = useState<number>(0);
-  const [initialBotMessageSet, setInitialBotMessageSet] = useState(false);
 
   // Listener for Firestore messages
   useEffect(() => {
-    if (!isOpen || !db) return;
+    if (!isOpen || !db) {
+      setMessages([]); // Clear messages if chat is closed or db not ready
+      return; // Early exit
+    }
 
-    if (!currentUser && !authIsLoading && !initialBotMessageSet) {
+    if (authIsLoading) {
+      setMessages([]); // Clear messages and show loading state if auth is loading
+      // Optionally, set a specific loading message in the chat window
+      return; // Early exit
+    }
+
+    if (!currentUser) {
+      // Not logged in, show prompt message
       setMessages([{
         id: 'login-prompt-bot',
         text: 'Welcome! Please log in or sign up to chat.',
@@ -71,21 +80,10 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
         timestamp: new Date(),
         isCurrentUser: false,
       }]);
-      setInitialBotMessageSet(true);
-      return;
-    }
-    
-    if (currentUser) {
-       setInitialBotMessageSet(false); // Reset if user logs in
+      return; // Stop here if not logged in, no listener needed
     }
 
-
-    if (!currentUser || authIsLoading) {
-        setMessages([]); // Clear messages if user logs out or is loading
-        return;
-    }
-
-
+    // If we reach here, user is logged in, chat is open, and auth is not loading
     const q = query(
       collection(db, CHAT_COLLECTION),
       orderBy('timestamp', 'asc'),
@@ -105,7 +103,7 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
             senderUsername: data.senderUsername,
             senderAvatarUrl: data.senderAvatarUrl,
             timestamp: (data.timestamp as Timestamp)?.toDate() || new Date(),
-            isCurrentUser: data.senderId === currentUser?.id,
+            isCurrentUser: data.senderId === currentUser.id, // Ensured currentUser is not null here
           });
         });
         setMessages(fetchedMessages);
@@ -120,30 +118,8 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
       }
     );
 
-    return () => unsubscribe();
-  }, [isOpen, currentUser, authIsLoading, toast, initialBotMessageSet]);
-
-
-  useEffect(() => {
-    if (isOpen && !authIsLoading) {
-      setInputValue('');
-      setLastMessageTime(0); 
-       if (!currentUser && !initialBotMessageSet) {
-         setMessages([{
-            id: 'login-prompt-bot',
-            text: 'Welcome! Please log in or sign up to chat.',
-            senderId: 'bot',
-            senderUsername: 'Gamblr Nation Bot',
-            senderAvatarUrl: 'https://placehold.co/40x40/A050C3/FFFFFF.png',
-            timestamp: new Date(),
-            isCurrentUser: false,
-          }]);
-          setInitialBotMessageSet(true);
-       } else if (currentUser) {
-         setInitialBotMessageSet(false); // Ensure it's reset if user logs in while sidebar is open
-       }
-    }
-  }, [isOpen, authIsLoading, currentUser, initialBotMessageSet]);
+    return () => unsubscribe(); // Cleanup listener when effect re-runs or component unmounts
+  }, [isOpen, currentUser, authIsLoading, db, toast]); // Dependencies for the effect
 
 
   useEffect(() => {
@@ -154,6 +130,15 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
       }
     }
   }, [messages]);
+  
+  // Effect to clear input and reset slow mode when chat opens or user changes
+  useEffect(() => {
+    if (isOpen) {
+        setInputValue('');
+        setLastMessageTime(0);
+    }
+  }, [isOpen, currentUser]);
+
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value;
@@ -210,9 +195,9 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
 
     try {
       await addDoc(collection(db, CHAT_COLLECTION), newMessage);
-      setInputValue('');
+      setInputValue(''); // Clear input after successful send
       setLastMessageTime(Date.now());
-      // The real-time listener will update the messages state
+      // The real-time listener will update the messages state, no need to manually add here
     } catch (error) {
       console.error("Error sending message: ", error);
       toast({
@@ -241,7 +226,6 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
             <Skull className="h-5 w-5 text-muted-foreground" />
             <h2 id="chat-sidebar-title" className="text-md font-semibold text-foreground">Degen Chat</h2>
           </div>
-          {/* Live user count removed for now */}
           <Button
             type="button"
             size="icon"
@@ -257,29 +241,47 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
           <div className="space-y-4">
             {messages.map((msg) => {
               const isUserMsg = msg.isCurrentUser;
-              const avatarSrc = msg.senderId === 'bot' ? msg.senderAvatarUrl : (isUserMsg ? currentUser?.profileImageUrl : msg.senderAvatarUrl);
-              const avatarHint = msg.senderId === 'bot' ? "cartoon monkey" : "user avatar";
-              const avatarFallbackText = msg.senderUsername ? msg.senderUsername.charAt(0).toUpperCase() : <UserIconLucide className="h-4 w-4" />;
+              // Determine avatar source and fallback
+              let avatarSrc: string | undefined | null = msg.senderAvatarUrl;
+              let avatarHint = "user avatar";
+              let avatarFallbackText: React.ReactNode = msg.senderUsername ? msg.senderUsername.charAt(0).toUpperCase() : <UserIconLucide className="h-4 w-4" />;
+
+              if (msg.senderId === 'bot') {
+                avatarSrc = 'https://placehold.co/40x40/A050C3/FFFFFF.png'; // Bot specific avatar
+                avatarHint = "cartoon monkey";
+                avatarFallbackText = "B";
+              } else if (isUserMsg && currentUser) {
+                avatarSrc = currentUser.profileImageUrl;
+              }
+
 
               return (
-                <div key={msg.id} className={`flex ${isUserMsg ? 'justify-end' : 'justify-start'}`}>
-                  <div className={cn('flex items-start gap-2.5 max-w-[80%]', isUserMsg ? 'flex-row-reverse' : 'flex-row')}>
+                <div key={msg.id} className={`flex ${isUserMsg && msg.senderId !== 'bot' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={cn(
+                      'flex items-start gap-2.5 max-w-[80%]', 
+                      isUserMsg && msg.senderId !== 'bot' ? 'flex-row-reverse' : 'flex-row'
+                    )}
+                  >
                     <Avatar className="h-8 w-8 shrink-0">
                       {avatarSrc ? (
                         <AvatarImage src={avatarSrc} alt={msg.senderUsername} data-ai-hint={avatarHint} />
                       ) : null}
                       <AvatarFallback className={cn(
-                        isUserMsg || msg.senderId === 'bot' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground'
+                        (isUserMsg && msg.senderId !== 'bot') || msg.senderId === 'bot' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground'
                       )}>
                         {avatarFallbackText}
                       </AvatarFallback>
                     </Avatar>
-                    <div className={cn('flex flex-col gap-0.5', isUserMsg ? 'items-end' : 'items-start')}>
+                    <div className={cn(
+                        'flex flex-col gap-0.5', 
+                        isUserMsg && msg.senderId !== 'bot' ? 'items-end' : 'items-start'
+                      )}
+                    >
                       <span className="text-xs font-semibold text-foreground px-1">{msg.senderUsername}</span>
                       <div
                         className={cn(
                           'p-3 rounded-lg text-sm font-normal break-all whitespace-normal', 
-                          isUserMsg
+                          isUserMsg && msg.senderId !== 'bot'
                             ? 'bg-primary text-primary-foreground rounded-br-none' 
                             : 'bg-secondary text-secondary-foreground rounded-bl-none'
                         )}
@@ -299,6 +301,9 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
                 </div>
               );
             })}
+             {authIsLoading && messages.length === 0 && (
+                <p className="text-muted-foreground text-center py-4">Loading chat...</p>
+            )}
           </div>
         </ScrollArea>
 
@@ -375,3 +380,4 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
     </div>
   );
 }
+
