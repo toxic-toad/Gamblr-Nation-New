@@ -88,15 +88,15 @@ export default function ProfilePage() {
       if (!isEditingUsername) {
         setNewUsername(currentUser.username || '');
       }
-      setCurrentProfilePicUrl(currentUser.profileImageUrl || '');
-      const existingSvg = predefinedSvgAvatars.find(avatar => currentProfilePicUrl === convertSvgStringToDataUrl(avatar.svgString));
-      if (existingSvg) {
-        setSelectedSvgKey(existingSvg.key);
-      } else {
-        setSelectedSvgKey(null);
+      // Update currentProfilePicUrl if the user's actual profileImageUrl changes
+      // This ensures the preview and selection logic use the latest saved avatar
+      if (currentUser.profileImageUrl !== currentProfilePicUrl && !showSvgSelector) {
+        setCurrentProfilePicUrl(currentUser.profileImageUrl || '');
+        const existingSvg = predefinedSvgAvatars.find(avatar => currentUser.profileImageUrl === convertSvgStringToDataUrl(avatar.svgString));
+        setSelectedSvgKey(existingSvg ? existingSvg.key : null);
       }
     }
-  }, [currentUser, isLoading, router, isEditingUsername, currentProfilePicUrl]);
+  }, [currentUser, isLoading, router, isEditingUsername, currentProfilePicUrl, showSvgSelector]);
 
 
   const handleSendVerificationEmail = async () => {
@@ -209,7 +209,7 @@ export default function ProfilePage() {
   
   const isEmailVerified = auth.currentUser?.emailVerified ?? false;
 
-  // Use currentProfilePicUrl for avatar display to show preview
+  // Use currentProfilePicUrl for avatar display to show preview from SVG selector or actual saved URL
   const avatarToDisplay = currentProfilePicUrl || '';
 
   return (
@@ -230,13 +230,16 @@ export default function ProfilePage() {
               size="icon" 
               className="absolute bottom-4 right-0 h-8 w-8 rounded-full bg-card/80 border-primary text-primary group-hover:opacity-100 opacity-60 transition-opacity"
               onClick={() => {
-                setShowSvgSelector(prev => !prev);
-                // When opening selector, if no SVG is chosen yet, revert preview to saved one
-                if (!showSvgSelector) {
-                  setCurrentProfilePicUrl(currentUser.profileImageUrl || '');
-                  const existingSvg = predefinedSvgAvatars.find(avatar => currentUser.profileImageUrl === convertSvgStringToDataUrl(avatar.svgString));
-                  setSelectedSvgKey(existingSvg ? existingSvg.key : null);
-                }
+                setShowSvgSelector(prev => {
+                  const openingSelector = !prev;
+                  if (openingSelector) {
+                    // When opening, reset preview to currently saved avatar and update selection
+                    setCurrentProfilePicUrl(currentUser.profileImageUrl || '');
+                    const existingSvg = predefinedSvgAvatars.find(avatar => currentUser.profileImageUrl === convertSvgStringToDataUrl(avatar.svgString));
+                    setSelectedSvgKey(existingSvg ? existingSvg.key : null);
+                  }
+                  return openingSelector;
+                });
               }}
               aria-label="Change profile picture"
             >
