@@ -70,7 +70,6 @@ export default function ProfilePage() {
           }
           ctx.drawImage(img, 0, 0, width, height);
           
-          // Prefer JPEG for photos unless it's a PNG and we want to preserve transparency (though photoURL typically doesn't show transparency well)
           const mimeType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
           const resizedImageUrl = canvas.toDataURL(mimeType, IMAGE_QUALITY);
 
@@ -87,11 +86,16 @@ export default function ProfilePage() {
           try {
             await updateProfilePicture(currentUser.id, resizedImageUrl);
             toast({ title: "Profile Picture Updated", description: "Your new profile picture has been saved.", variant: "default" });
-          } catch (error) {
-            if ((error as Error).message && (error as Error).message.includes('auth/invalid-profile-attribute')) {
-                toast({ title: "Upload Failed", description: "Firebase rejected the image data as too large. Please try a different, smaller, or simpler image.", variant: "destructive", duration: 7000, });
+          } catch (error: any) {
+            if (error.code === 'auth/invalid-profile-attribute') {
+                toast({ 
+                  title: "Upload Failed", 
+                  description: "Firebase rejected the image data as too large. Please try a different, smaller, or simpler image.", 
+                  variant: "destructive",
+                  duration: 7000, 
+                });
             } else {
-                toast({ title: "Error Updating Profile", description: (error as Error).message || "Could not update profile picture.", variant: "destructive" });
+                toast({ title: "Error Updating Profile", description: error.message || "Could not update profile picture.", variant: "destructive" });
             }
           }
         };
