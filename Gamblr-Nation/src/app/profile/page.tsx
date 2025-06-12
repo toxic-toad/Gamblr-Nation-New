@@ -5,7 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { User, Mail, LogOut, Camera, ShieldCheck, Edit3, Save, XCircle, CheckSquare, Palette } from 'lucide-react';
+import { User, Mail, LogOut, ShieldCheck, Edit3, Save, XCircle, Palette, CheckSquare } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, FormEvent } from 'react';
 import { useToast } from "@/hooks/use-toast";
@@ -39,14 +39,22 @@ const predefinedSvgAvatars = [
     name: 'Controller',
     svgString: `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><path d="M50,16H14a8,8,0,0,0-8,8V38a8,8,0,0,0,8,8H26v6.59a1,1,0,0,0,1.71.7L32,49l4.29,4.29A1,1,0,0,0,38,52.59V46H50a8,8,0,0,0,8-8V24A8,8,0,0,0,50,16ZM20,38a4,4,0,1,1,4-4A4,4,0,0,1,20,38Zm8-8H24V26h4Zm8,8a4,4,0,1,1,4-4A4,4,0,0,1,36,38Zm8-8H40V26h4Z" fill="hsl(var(--primary))"/><circle cx="20" cy="34" r="2" fill="hsl(var(--accent))"/><circle cx="36" cy="34" r="2" fill="hsl(var(--accent))"/><rect x="26" y="28" width="4" height="4" fill="hsl(var(--accent))"/><rect x="42" y="28" width="4" height="4" fill="hsl(var(--accent))"/></svg>`,
   },
+  {
+    key: 'elegantFlower',
+    name: 'Flower',
+    svgString: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="gradFlower" cx="50%" cy="50%" r="50%" fx="50%" fy="50%"><stop offset="0%" style="stop-color:hsl(var(--accent));stop-opacity:0.8" /><stop offset="100%" style="stop-color:hsl(var(--primary));stop-opacity:1" /></radialGradient></defs><path d="M50 10 C 40 25, 40 25, 30 30 C 20 35, 20 45, 25 50 C 30 55, 30 65, 40 70 C 45 75, 45 85, 50 90 C 55 85, 55 75, 60 70 C 70 65, 70 55, 75 50 C 80 45, 80 35, 70 30 C 60 25, 60 25, 50 10 Z" fill="url(#gradFlower)" /><path d="M50 10 C 60 25, 60 25, 70 30 C 80 35, 80 45, 75 50 C 70 55, 70 65, 60 70 C 55 75, 55 85, 50 90 C 45 85, 45 75, 40 70 C 30 65, 30 55, 25 50 C 20 45, 20 35, 30 30 C 40 25, 40 25, 50 10 Z" fill="none" stroke="hsl(var(--accent))" stroke-width="2" transform="rotate(30 50 50)" /><path d="M50 10 C 60 25, 60 25, 70 30 C 80 35, 80 45, 75 50 C 70 55, 70 65, 60 70 C 55 75, 55 85, 50 90 C 45 85, 45 75, 40 70 C 30 65, 30 55, 25 50 C 20 45, 20 35, 30 30 C 40 25, 40 25, 50 10 Z" fill="none" stroke="hsl(var(--primary))" stroke-width="1.5" transform="rotate(60 50 50)" /><circle cx="50" cy="50" r="5" fill="hsl(var(--background))" /></svg>`,
+  },
+  {
+    key: 'cosmicSwirl',
+    name: 'Cosmic Swirl',
+    svgString: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" fill="hsl(var(--background))" /><defs><linearGradient id="gradSwirl" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:hsl(var(--primary));stop-opacity:1" /><stop offset="100%" style="stop-color:hsl(var(--accent));stop-opacity:1" /></linearGradient></defs><circle cx="50" cy="50" r="40" fill="none" stroke="url(#gradSwirl)" stroke-width="5" stroke-dasharray="10 15" transform="rotate(0 50 50)"><animateTransform attributeName="transform" type="rotate" from="0 50 50" to="360 50 50" dur="10s" repeatCount="indefinite" /></circle><circle cx="50" cy="50" r="25" fill="none" stroke="hsl(var(--accent))" stroke-width="3" stroke-dasharray="5 10" transform="rotate(0 50 50)"><animateTransform attributeName="transform" type="rotate" from="360 50 50" to="0 50 50" dur="8s" repeatCount="indefinite" /></circle><circle cx="50" cy="50" r="10" fill="hsl(var(--primary))" /></svg>`,
+  },
 ];
 
 const convertSvgStringToDataUrl = (svgString: string) => {
   if (typeof btoa === 'function') {
     return `data:image/svg+xml;base64,${btoa(svgString)}`;
   }
-  // Fallback for environments where btoa might not be available (e.g., some Node.js contexts without polyfills)
-  // This is less likely in a modern browser environment for Next.js client-side code.
   if (typeof Buffer !== 'undefined') {
     return `data:image/svg+xml;base64,${Buffer.from(svgString).toString('base64')}`;
   }
@@ -80,14 +88,12 @@ export default function ProfilePage() {
       if (!isEditingUsername) {
         setNewUsername(currentUser.username || '');
       }
-      setCurrentProfilePicUrl(currentUser.profileImageUrl || ''); // Update on currentUser change
-      // If user has an SVG avatar, try to preselect it.
-      // This is a naive check; a more robust way would be to store the key.
+      setCurrentProfilePicUrl(currentUser.profileImageUrl || '');
       const existingSvg = predefinedSvgAvatars.find(avatar => currentProfilePicUrl === convertSvgStringToDataUrl(avatar.svgString));
       if (existingSvg) {
         setSelectedSvgKey(existingSvg.key);
       } else {
-        setSelectedSvgKey(null); // Reset if current avatar is not one of the predefined
+        setSelectedSvgKey(null);
       }
     }
   }, [currentUser, isLoading, router, isEditingUsername, currentProfilePicUrl]);
@@ -165,6 +171,7 @@ export default function ProfilePage() {
     setSelectedSvgKey(svgKey);
     const svgData = predefinedSvgAvatars.find(s => s.key === svgKey);
     if (svgData) {
+      // Preview the selected SVG
       setCurrentProfilePicUrl(convertSvgStringToDataUrl(svgData.svgString));
     }
   };
@@ -185,6 +192,7 @@ export default function ProfilePage() {
         await updateProfilePicture(currentUser.id, dataUrl);
         toast({ title: "Avatar Updated", description: "Your new avatar has been saved.", variant: "default" });
         setShowSvgSelector(false);
+        // After saving, currentProfilePicUrl will be updated by the useEffect watching currentUser
       } catch (error: any) {
         toast({ title: "Error Updating Avatar", description: error.message || "Could not update avatar.", variant: "destructive" });
       }
@@ -201,10 +209,8 @@ export default function ProfilePage() {
   
   const isEmailVerified = auth.currentUser?.emailVerified ?? false;
 
-  const avatarToDisplay = selectedSvgKey && showSvgSelector 
-    ? convertSvgStringToDataUrl(predefinedSvgAvatars.find(s => s.key === selectedSvgKey)!.svgString)
-    : currentUser.profileImageUrl || '';
-
+  // Use currentProfilePicUrl for avatar display to show preview
+  const avatarToDisplay = currentProfilePicUrl || '';
 
   return (
     <div className="max-w-2xl mx-auto space-y-8">
@@ -223,7 +229,15 @@ export default function ProfilePage() {
               variant="outline" 
               size="icon" 
               className="absolute bottom-4 right-0 h-8 w-8 rounded-full bg-card/80 border-primary text-primary group-hover:opacity-100 opacity-60 transition-opacity"
-              onClick={() => setShowSvgSelector(prev => !prev)}
+              onClick={() => {
+                setShowSvgSelector(prev => !prev);
+                // When opening selector, if no SVG is chosen yet, revert preview to saved one
+                if (!showSvgSelector) {
+                  setCurrentProfilePicUrl(currentUser.profileImageUrl || '');
+                  const existingSvg = predefinedSvgAvatars.find(avatar => currentUser.profileImageUrl === convertSvgStringToDataUrl(avatar.svgString));
+                  setSelectedSvgKey(existingSvg ? existingSvg.key : null);
+                }
+              }}
               aria-label="Change profile picture"
             >
               <Palette className="h-4 w-4" />
@@ -275,7 +289,7 @@ export default function ProfilePage() {
         {showSvgSelector && (
           <CardContent className="border-t border-border pt-6">
             <h3 className="text-lg font-semibold text-accent mb-4 text-center">Choose Your Avatar</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
               {predefinedSvgAvatars.map((avatar) => (
                 <Button
                   key={avatar.key}
@@ -297,8 +311,8 @@ export default function ProfilePage() {
               </Button>
               <Button variant="ghost" onClick={() => {
                 setShowSvgSelector(false);
-                setSelectedSvgKey(null); // Reset selection
-                setCurrentProfilePicUrl(currentUser.profileImageUrl || ''); // Revert to original
+                setSelectedSvgKey(null); 
+                setCurrentProfilePicUrl(currentUser.profileImageUrl || ''); 
               }}>
                 Cancel
               </Button>
