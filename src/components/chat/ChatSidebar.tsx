@@ -59,18 +59,24 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
   // Listener for Firestore messages
   useEffect(() => {
     if (!isOpen || !db) {
-      setMessages([]); // Clear messages if chat is closed or db not ready
-      return; // Early exit
+      setMessages([]); 
+      return; 
     }
 
     if (authIsLoading) {
-      setMessages([]); // Clear messages and show loading state if auth is loading
-      // Optionally, set a specific loading message in the chat window
-      return; // Early exit
+      setMessages([{
+        id: 'loading-auth-bot',
+        text: 'Verifying login status...',
+        senderId: 'bot',
+        senderUsername: 'Gamblr Nation Bot',
+        senderAvatarUrl: 'https://placehold.co/40x40/A050C3/FFFFFF.png',
+        timestamp: new Date(),
+        isCurrentUser: false,
+      }]);
+      return; 
     }
 
     if (!currentUser) {
-      // Not logged in, show prompt message
       setMessages([{
         id: 'login-prompt-bot',
         text: 'Welcome! Please log in or sign up to chat.',
@@ -80,10 +86,9 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
         timestamp: new Date(),
         isCurrentUser: false,
       }]);
-      return; // Stop here if not logged in, no listener needed
+      return; 
     }
 
-    // If we reach here, user is logged in, chat is open, and auth is not loading
     const q = query(
       collection(db, CHAT_COLLECTION),
       orderBy('timestamp', 'asc'),
@@ -103,7 +108,7 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
             senderUsername: data.senderUsername,
             senderAvatarUrl: data.senderAvatarUrl,
             timestamp: (data.timestamp as Timestamp)?.toDate() || new Date(),
-            isCurrentUser: data.senderId === currentUser.id, // Ensured currentUser is not null here
+            isCurrentUser: data.senderId === currentUser.id,
           });
         });
         setMessages(fetchedMessages);
@@ -111,15 +116,15 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
       (error) => {
         console.error("Error fetching chat messages: ", error);
         toast({
-          title: "Error",
-          description: "Could not load chat messages. Please try again later.",
+          title: "Chat Error",
+          description: "Could not load chat messages. Please check your connection or try again later.",
           variant: "destructive",
         });
       }
     );
 
-    return () => unsubscribe(); // Cleanup listener when effect re-runs or component unmounts
-  }, [isOpen, currentUser, authIsLoading, db, toast]); // Dependencies for the effect
+    return () => unsubscribe();
+  }, [isOpen, currentUser, authIsLoading, toast]); // Removed db from dependencies as it should be stable
 
 
   useEffect(() => {
@@ -131,7 +136,6 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
     }
   }, [messages]);
   
-  // Effect to clear input and reset slow mode when chat opens or user changes
   useEffect(() => {
     if (isOpen) {
         setInputValue('');
@@ -162,12 +166,12 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
 
-    if (authIsLoading) {
-      toast({ title: "Loading...", description: "Please wait.", variant: "default" });
-      return;
-    }
-    if (!currentUser) {
-      toast({ title: "Login Required", description: "Please log in to send messages.", variant: "destructive" });
+    if (authIsLoading || !currentUser) {
+      toast({ 
+        title: authIsLoading ? "Loading..." : "Login Required", 
+        description: authIsLoading ? "Please wait." : "Please log in to send messages.", 
+        variant: authIsLoading ? "default" : "destructive" 
+      });
       return;
     }
 
@@ -185,6 +189,9 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
         return;
     }
 
+    // Optimistically clear input
+    setInputValue('');
+
     const newMessage = {
       text: trimmedMessage,
       senderId: currentUser.id,
@@ -195,9 +202,7 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
 
     try {
       await addDoc(collection(db, CHAT_COLLECTION), newMessage);
-      setInputValue(''); // Clear input after successful send
       setLastMessageTime(Date.now());
-      // The real-time listener will update the messages state, no need to manually add here
     } catch (error) {
       console.error("Error sending message: ", error);
       toast({
@@ -205,6 +210,9 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
         description: "Could not send your message. Please try again.",
         variant: "destructive",
       });
+      // If send fails, optionally restore input value, though this can be complex
+      // For now, we leave it cleared for simplicity of UI feedback.
+      // setInputValue(trimmedMessage); // Example: Restore if send fails
     }
   };
   
@@ -241,19 +249,17 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
           <div className="space-y-4">
             {messages.map((msg) => {
               const isUserMsg = msg.isCurrentUser;
-              // Determine avatar source and fallback
               let avatarSrc: string | undefined | null = msg.senderAvatarUrl;
               let avatarHint = "user avatar";
               let avatarFallbackText: React.ReactNode = msg.senderUsername ? msg.senderUsername.charAt(0).toUpperCase() : <UserIconLucide className="h-4 w-4" />;
 
               if (msg.senderId === 'bot') {
-                avatarSrc = 'https://placehold.co/40x40/A050C3/FFFFFF.png'; // Bot specific avatar
+                avatarSrc = 'https://placehold.co/40x40/A050C3/FFFFFF.png';
                 avatarHint = "cartoon monkey";
                 avatarFallbackText = "B";
-              } else if (isUserMsg && currentUser) {
+              } else if (isUserMsg && currentUser) { // Check currentUser here
                 avatarSrc = currentUser.profileImageUrl;
               }
-
 
               return (
                 <div key={msg.id} className={`flex ${isUserMsg && msg.senderId !== 'bot' ? 'justify-end' : 'justify-start'}`}>
@@ -267,7 +273,7 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
                         <AvatarImage src={avatarSrc} alt={msg.senderUsername} data-ai-hint={avatarHint} />
                       ) : null}
                       <AvatarFallback className={cn(
-                        (isUserMsg && msg.senderId !== 'bot') || msg.senderId === 'bot' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground'
+                        msg.senderId === 'bot' ? 'bg-accent text-accent-foreground' : (isUserMsg ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground')
                       )}>
                         {avatarFallbackText}
                       </AvatarFallback>
@@ -301,8 +307,14 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
                 </div>
               );
             })}
-             {authIsLoading && messages.length === 0 && (
-                <p className="text-muted-foreground text-center py-4">Loading chat...</p>
+             {(authIsLoading || (!currentUser && !authIsLoading && messages.length === 1 && messages[0].id === 'login-prompt-bot') ) && messages.length <=1 && (
+                // Display specific messages for loading or login prompt rather than a generic one if those are the only messages
+                // This keeps the "Loading chat..." or "Login to chat..." message visible until other messages load or user logs in.
+                // The condition `messages.length <=1` ensures that if actual chat messages arrive, this message gets replaced.
+                null 
+            )}
+            {!authIsLoading && !currentUser && messages.length === 0 && (
+                 <p className="text-muted-foreground text-center py-4">Log in to see the chat.</p>
             )}
           </div>
         </ScrollArea>
@@ -314,7 +326,7 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
                 type="text"
                 value={inputValue}
                 onChange={handleInputChange}
-                placeholder={authIsLoading ? "Checking login..." : (currentUser ? "Type Message Here..." : "Log in to chat...")}
+                placeholder={authIsLoading ? "Verifying login..." : (currentUser ? "Type Message Here..." : "Log in to chat...")}
                 className="flex-grow bg-input text-foreground placeholder:text-muted-foreground pr-10 rounded-md" 
                 aria-label="Chat message input"
                 disabled={authIsLoading || !currentUser}
@@ -380,4 +392,4 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
     </div>
   );
 }
-
+    
