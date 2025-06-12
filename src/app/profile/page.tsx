@@ -12,9 +12,9 @@ import { useToast } from "@/hooks/use-toast";
 import { auth } from '@/lib/firebase'; // Import auth for verification status
 import { sendEmailVerification } from 'firebase/auth';
 
-const MAX_IMAGE_DIMENSION = 192; // Max width/height for resized profile picture
-const IMAGE_QUALITY = 0.7; // JPEG quality (0.0 to 1.0)
-const MAX_DATA_URL_LENGTH = 32000; // Drastically reduced: Approx 32KB limit for data URL string
+const MAX_IMAGE_DIMENSION = 128; // Max width/height for resized profile picture (Reduced further)
+const IMAGE_QUALITY = 0.6; // JPEG quality (0.0 to 1.0) (Reduced further)
+const MAX_DATA_URL_LENGTH = 32000; // Approx 32KB limit for data URL string
 
 export default function ProfilePage() {
   const { currentUser, logout, isLoading, updateProfilePicture } = useAuth();
@@ -87,7 +87,7 @@ export default function ProfilePage() {
             await updateProfilePicture(currentUser.id, resizedImageUrl);
             toast({ title: "Profile Picture Updated", description: "Your new profile picture has been saved.", variant: "default" });
           } catch (error: any) {
-            if (error.code === 'auth/invalid-profile-attribute') {
+            if ((error as any).code === 'auth/invalid-profile-attribute') {
                 toast({ 
                   title: "Upload Failed", 
                   description: "Firebase rejected the image data as too large. Please try a different, smaller, or simpler image.", 
