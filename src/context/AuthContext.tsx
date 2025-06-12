@@ -15,10 +15,10 @@ import {
 interface AuthContextType {
   currentUser: AppUser | null;
   isLoading: boolean;
-  login: (firebaseUser: FirebaseUser, appUsername?: string) => Promise<void>; // Adjusted to accept FirebaseUser
+  login: (firebaseUser: FirebaseUser, appUsername?: string) => Promise<void>;
   logout: () => Promise<void>;
   updateProfilePicture: (userId: string, imageUrl: string) => Promise<void>;
-  // No direct signup method here, handled by signup page then calls login
+  updateUserDisplayName: (userId: string, newUsername: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -49,25 +49,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (firebaseUser: FirebaseUser, appUsername?: string) => {
-    // If displayName is not set on Firebase user (e.g. fresh signup) and appUsername is provided, update it.
     if (!firebaseUser.displayName && appUsername) {
       try {
         await updateProfile(firebaseUser, { displayName: appUsername });
       } catch (error) {
         console.error("Error updating display name on Firebase:", error);
-        // Continue even if display name update fails, user is still logged in
       }
     }
     
     const appUser: AppUser = {
       id: firebaseUser.uid,
-      username: appUsername || firebaseUser.displayName, // Prioritize appUsername if provided (for signup)
+      username: appUsername || firebaseUser.displayName,
       email: firebaseUser.email,
       profileImageUrl: firebaseUser.photoURL,
     };
     setCurrentUser(appUser);
-    // Only redirect if not already on a public page like '/' or '/games' to avoid redirect loops
-    // Or if user is on login/signup pages
     if (pathname === '/login' || pathname === '/signup') {
         router.push('/');
     }
@@ -80,7 +76,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       router.push('/login');
     } catch (error) {
       console.error("Error signing out: ", error);
-      // Handle error, e.g., show toast
     }
   }, [router]);
 
@@ -91,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setCurrentUser(prevUser => prevUser ? { ...prevUser, profileImageUrl: imageUrl } : null);
       } catch (error) {
         console.error("Error updating profile picture in Firebase: ", error);
-        throw error; // Re-throw to be caught by the calling component (e.g., to show a toast)
+        throw error;
       }
     } else {
       console.error("User not logged in or mismatching ID for profile picture update.");
@@ -99,8 +94,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const updateUserDisplayName = useCallback(async (userId: string, newUsername: string) => {
+    if (auth.currentUser && auth.currentUser.uid === userId) {
+      try {
+        await updateProfile(auth.currentUser, { displayName: newUsername });
+        setCurrentUser(prevUser => prevUser ? { ...prevUser, username: newUsername } : null);
+        console.warn("Username uniqueness is not checked on the client-side. For production, implement server-side validation.");
+      } catch (error) {
+        console.error("Error updating display name in Firebase: ", error);
+        throw error;
+      }
+    } else {
+      console.error("User not logged in or mismatching ID for display name update.");
+      throw new Error("User not authenticated or ID mismatch for display name.");
+    }
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ currentUser, isLoading, login, logout, updateProfilePicture }}>
+    <AuthContext.Provider value={{ currentUser, isLoading, login, logout, updateProfilePicture, updateUserDisplayName }}>
       {children}
     </AuthContext.Provider>
   );

@@ -5,31 +5,43 @@ import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { User, Mail, LogOut, Camera, ShieldCheck } from 'lucide-react';
+import { User, Mail, LogOut, Camera, ShieldCheck, Edit3, Save, XCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, ChangeEvent, useState } from 'react';
+import { useEffect, useRef, ChangeEvent, useState, FormEvent } from 'react';
 import { useToast } from "@/hooks/use-toast";
-import { auth } from '@/lib/firebase'; // Import auth for verification status
+import { auth } from '@/lib/firebase';
 import { sendEmailVerification } from 'firebase/auth';
+import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 
-const MAX_IMAGE_DIMENSION = 96; // Max width/height for resized profile picture (Very small)
-const IMAGE_QUALITY = 0.7; // JPEG quality (0.0 to 1.0)
-const MAX_DATA_URL_LENGTH = 4000; // Extremely strict limit for data URL string (approx 4KB)
+const MAX_IMAGE_DIMENSION = 96;
+const IMAGE_QUALITY = 0.7;
+const MAX_DATA_URL_LENGTH = 4000; 
+const MIN_USERNAME_LENGTH = 3;
+const MAX_USERNAME_LENGTH = 20;
+
 
 export default function ProfilePage() {
-  const { currentUser, logout, isLoading, updateProfilePicture } = useAuth();
+  const { currentUser, logout, isLoading, updateProfilePicture, updateUserDisplayName } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isVerificationEmailSent, setIsVerificationEmailSent] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
+  
+  const [isEditingUsername, setIsEditingUsername] = useState(false);
+  const [newUsername, setNewUsername] = useState(currentUser?.username || '');
+  const [usernameError, setUsernameError] = useState('');
 
 
   useEffect(() => {
     if (!isLoading && !currentUser) {
       router.push('/login');
     }
-  }, [currentUser, isLoading, router]);
+    if (currentUser && !isEditingUsername) {
+        setNewUsername(currentUser.username || '');
+    }
+  }, [currentUser, isLoading, router, isEditingUsername]);
 
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -38,7 +50,7 @@ export default function ProfilePage() {
         toast({ title: "Invalid File Type", description: "Please select an image file (JPEG, PNG, GIF, WebP).", variant: "destructive" });
         return;
       }
-      if (file.size > 2 * 1024 * 1024) { // 2MB limit before resizing attempt
+      if (file.size > 2 * 1024 * 1024) { 
         toast({ title: "File Too Large", description: "Please select an image smaller than 2MB.", variant: "destructive" });
         return;
       }
@@ -70,13 +82,13 @@ export default function ProfilePage() {
           }
           ctx.drawImage(img, 0, 0, width, height);
           
-          const resizedMimeType = 'image/jpeg'; // Always attempt JPEG for compression
+          const resizedMimeType = 'image/jpeg';
           const resizedImageUrl = canvas.toDataURL(resizedMimeType, IMAGE_QUALITY);
 
           if (resizedImageUrl.length > MAX_DATA_URL_LENGTH) {
              toast({
-               title: "Upload Failed: Image Data Too Large",
-               description: `The image is too large even after aggressive compression (max ${MAX_DATA_URL_LENGTH / 1000}KB for profile picture). Please use a significantly smaller or simpler image file.`,
+               title: "Upload Failed: Image Too Small",
+               description: `The image you selected is too small or simple for the profile picture. It resulted in data too short (max ${MAX_DATA_URL_LENGTH / 1000}KB for profile picture). Please use a slightly larger or more complex image file.`,
                variant: "destructive",
                duration: 10000, 
               });
@@ -110,7 +122,6 @@ export default function ProfilePage() {
       }
       reader.readAsDataURL(file);
     }
-    // Clear the file input after processing to allow re-selection of the same file
     if (fileInputRef.current) {
         fileInputRef.current.value = "";
     }
@@ -143,6 +154,50 @@ export default function ProfilePage() {
     }
   };
 
+  const handleUsernameChangeSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setUsernameError('');
+    if (!currentUser) return;
+
+    const trimmedUsername = newUsername.trim();
+    if (trimmedUsername.length < MIN_USERNAME_LENGTH || trimmedUsername.length > MAX_USERNAME_LENGTH) {
+      setUsernameError(`Username must be between ${MIN_USERNAME_LENGTH} and ${MAX_USERNAME_LENGTH} characters.`);
+      return;
+    }
+    if (!/^[a-zA-Z0-9_]+$/.test(trimmedUsername)) {
+      setUsernameError('Username can only contain letters, numbers, and underscores.');
+      return;
+    }
+
+    if (trimmedUsername === currentUser.username) {
+      setIsEditingUsername(false);
+      return;
+    }
+
+    try {
+      await updateUserDisplayName(currentUser.id, trimmedUsername);
+      toast({
+        title: "Username Updated!",
+        description: `Your username is now ${trimmedUsername}. Note: Uniqueness across all users is not checked by this client-side update.`,
+        variant: "default",
+        duration: 7000,
+      });
+      setIsEditingUsername(false);
+    } catch (error: any) {
+      toast({
+        title: "Error Updating Username",
+        description: error.message || "Could not update username. Please try again.",
+        variant: "destructive",
+      });
+      setUsernameError(error.message || "An unexpected error occurred.");
+    }
+  };
+
+  const handleCancelEditUsername = () => {
+    setIsEditingUsername(false);
+    setNewUsername(currentUser?.username || '');
+    setUsernameError('');
+  };
 
   if (isLoading || !currentUser) {
     return (
@@ -175,8 +230,39 @@ export default function ProfilePage() {
               className="hidden"
             />
           </div>
-          <CardTitle className="text-3xl text-primary">{currentUser.username || 'User Profile'}</CardTitle>
-          <div className="flex items-center gap-2 text-muted-foreground">
+          
+          {!isEditingUsername ? (
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-3xl text-primary">{currentUser.username || 'User Profile'}</CardTitle>
+              <Button variant="ghost" size="icon" onClick={() => { setIsEditingUsername(true); setNewUsername(currentUser.username || ''); setUsernameError(''); }} className="h-7 w-7 text-primary/70 hover:text-primary">
+                <Edit3 className="h-5 w-5" />
+                <span className="sr-only">Edit username</span>
+              </Button>
+            </div>
+          ) : (
+            <form onSubmit={handleUsernameChangeSubmit} className="w-full max-w-sm space-y-3">
+              <Input
+                type="text"
+                value={newUsername}
+                onChange={(e) => setNewUsername(e.target.value)}
+                placeholder="Enter new username"
+                className={cn("text-center text-lg bg-input", usernameError && "border-destructive")}
+                minLength={MIN_USERNAME_LENGTH}
+                maxLength={MAX_USERNAME_LENGTH}
+              />
+              {usernameError && <p className="text-xs text-destructive text-center">{usernameError}</p>}
+              <div className="flex justify-center gap-2">
+                <Button type="submit" size="sm" className="bg-green-500 hover:bg-green-600 text-white">
+                  <Save className="mr-1.5 h-4 w-4" /> Save
+                </Button>
+                <Button type="button" variant="ghost" size="sm" onClick={handleCancelEditUsername} className="text-muted-foreground hover:text-destructive">
+                  <XCircle className="mr-1.5 h-4 w-4" /> Cancel
+                </Button>
+              </div>
+            </form>
+          )}
+
+          <div className="flex items-center gap-2 text-muted-foreground mt-1">
             <Mail className="h-4 w-4" />
             <span>{currentUser.email}</span>
             {isEmailVerified ? (
@@ -207,7 +293,7 @@ export default function ProfilePage() {
             <h3 className="text-lg font-semibold text-accent flex items-center">
               <User className="mr-2 h-5 w-5" /> Account Details
             </h3>
-            <p className="text-foreground/80"><strong>Username:</strong> {currentUser.username || <span className="italic text-muted-foreground">Not set</span>}</p>
+            {/* Username already displayed and editable in CardHeader */}
             <p className="text-foreground/80"><strong>Email:</strong> {currentUser.email}</p>
             <p className="text-foreground/80"><strong>User ID:</strong> <span className="text-xs">{currentUser.id}</span></p>
           </div>
@@ -234,5 +320,3 @@ export default function ProfilePage() {
     </div>
   );
 }
-
-    
