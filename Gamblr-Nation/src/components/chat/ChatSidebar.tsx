@@ -14,6 +14,17 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/context/AuthContext';
 import ChatRulesDialog from './ChatRulesDialog';
 import EmojiPicker from './EmojiPicker';
+import { db } from '@/lib/firebase';
+import {
+  collection,
+  addDoc,
+  query,
+  orderBy,
+  limitToLast,
+  onSnapshot,
+  serverTimestamp,
+  Timestamp,
+} from 'firebase/firestore';
 
 interface ChatSidebarProps {
   isOpen: boolean;
@@ -21,21 +32,19 @@ interface ChatSidebarProps {
 }
 
 interface Message {
-  id: string;
+  id: string; // Firestore document ID
   text: string;
-  sender: 'user' | 'bot';
-  name: string;
-  avatar?: string;
-  userAvatarUrl?: string;
-  timestamp: Date;
-  botAvatarHint?: string;
+  senderId: string;
+  senderUsername: string;
+  senderAvatarUrl?: string | null;
+  timestamp: Date; // Converted from Firestore Timestamp for display
+  isCurrentUser: boolean; // Helper for styling
 }
 
 const MAX_CHAT_LENGTH = 160;
-const MOCK_LIVE_USERS = 2;
 const SLOW_MODE_DELAY_MS = 5000; // 5 seconds
 const SANITIZE_REGEX = /[^a-zA-Z0-9\s!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/g;
-
+const CHAT_COLLECTION = 'public-chat-messages';
 
 export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
   const { currentUser, isLoading: authIsLoading } = useAuth();
@@ -47,25 +56,75 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [lastMessageTime, setLastMessageTime] = useState<number>(0);
 
-  const botName = "Gamblr Nation Bot";
-  const botAvatarPlaceholder = "https://placehold.co/40x40/A050C3/FFFFFF.png";
-  const botAvatarHint = "cartoon monkey";
-
   useEffect(() => {
-    if (isOpen && !authIsLoading) {
-      if (currentUser) {
-        setMessages([
-          { id: 'welcome-bot', text: `Hi ${currentUser.username}! How can I help you? (Simulated)`, sender: 'bot', name: botName, timestamp: new Date(), avatar: botAvatarPlaceholder, botAvatarHint: botAvatarHint }
-        ]);
-      } else {
-        setMessages([
-          { id: 'login-prompt-bot', text: `Welcome! Please log in or sign up to chat.`, sender: 'bot', name: botName, timestamp: new Date(), avatar: botAvatarPlaceholder, botAvatarHint: botAvatarHint }
-        ]);
-      }
-      setInputValue('');
-      setLastMessageTime(0); // Reset slow mode timer when chat opens/user changes
+    if (!isOpen || !db) {
+      setMessages([]); 
+      return; 
     }
-  }, [isOpen, currentUser, authIsLoading]);
+
+    if (authIsLoading) {
+      setMessages([{
+        id: 'loading-auth-bot',
+        text: 'Verifying login status...',
+        senderId: 'bot',
+        senderUsername: 'Gamblr Nation Bot',
+        senderAvatarUrl: 'https://placehold.co/40x40/A050C3/FFFFFF.png',
+        timestamp: new Date(),
+        isCurrentUser: false,
+      }]);
+      return; 
+    }
+
+    if (!currentUser) {
+      setMessages([{
+        id: 'login-prompt-bot',
+        text: 'Welcome! Please log in or sign up to chat.',
+        senderId: 'bot',
+        senderUsername: 'Gamblr Nation Bot',
+        senderAvatarUrl: 'https://placehold.co/40x40/A050C3/FFFFFF.png',
+        timestamp: new Date(),
+        isCurrentUser: false,
+      }]);
+      return; 
+    }
+
+    const q = query(
+      collection(db, CHAT_COLLECTION),
+      orderBy('timestamp', 'asc'),
+      limitToLast(50)
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (querySnapshot) => {
+        const fetchedMessages: Message[] = [];
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          fetchedMessages.push({
+            id: doc.id,
+            text: data.text,
+            senderId: data.senderId,
+            senderUsername: data.senderUsername,
+            senderAvatarUrl: data.senderAvatarUrl,
+            timestamp: (data.timestamp as Timestamp)?.toDate() || new Date(),
+            isCurrentUser: data.senderId === currentUser.id,
+          });
+        });
+        setMessages(fetchedMessages);
+      },
+      (error) => {
+        console.error("Error fetching chat messages: ", error);
+        toast({
+          title: "Chat Error",
+          description: "Could not load chat messages. Please check your connection or try again later.",
+          variant: "destructive",
+        });
+      }
+    );
+
+    return () => unsubscribe();
+  }, [isOpen, currentUser, authIsLoading, toast]);
+
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -75,18 +134,22 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
       }
     }
   }, [messages]);
+  
+  useEffect(() => {
+    if (isOpen) {
+        setInputValue('');
+        setLastMessageTime(0);
+    }
+  }, [isOpen, currentUser]);
+
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value;
-    
-    // Sanitize input to allow only specified characters
     value = value.replace(SANITIZE_REGEX, '');
-
     if (value.length <= MAX_CHAT_LENGTH) {
       setInputValue(value);
     } else {
       setInputValue(value.substring(0, MAX_CHAT_LENGTH));
-      // Toast for max length is shown when trying to send or add emoji if it exceeds
     }
   };
 
@@ -99,23 +162,14 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
     setIsEmojiPickerOpen(false);
   };
 
-  const handleSendMessage = (e: FormEvent) => {
+  const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
 
-    if (authIsLoading) {
-      toast({
-        title: "Loading...",
-        description: "Please wait while we check your login status.",
-        variant: "default",
-      });
-      return;
-    }
-
-    if (!currentUser) {
-      toast({
-        title: "Login Required",
-        description: "Please log in to send messages.",
-        variant: "destructive",
+    if (authIsLoading || !currentUser) {
+      toast({ 
+        title: authIsLoading ? "Loading..." : "Login Required", 
+        description: authIsLoading ? "Please wait." : "Please log in to send messages.", 
+        variant: authIsLoading ? "default" : "destructive" 
       });
       return;
     }
@@ -123,48 +177,38 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
     const now = Date.now();
     if (now - lastMessageTime < SLOW_MODE_DELAY_MS) {
       const timeLeft = Math.ceil((SLOW_MODE_DELAY_MS - (now - lastMessageTime)) / 1000);
-      toast({
-        title: "Slow Mode Active",
-        description: `Please wait ${timeLeft} second${timeLeft > 1 ? 's' : ''} before sending another message.`,
-        variant: "destructive",
-      });
+      toast({ title: "Slow Mode Active", description: `Please wait ${timeLeft}s.`, variant: "destructive" });
       return;
     }
     
     const trimmedMessage = inputValue.trim();
     if (trimmedMessage === '') return;
-
     if (trimmedMessage.length > MAX_CHAT_LENGTH) {
-        toast({ title: "Character limit reached", description: `Maximum ${MAX_CHAT_LENGTH} characters allowed. Your message is too long.`, variant: "destructive" });
+        toast({ title: "Character limit reached", description: `Maximum ${MAX_CHAT_LENGTH} characters.`, variant: "destructive" });
         return;
     }
 
+    setInputValue(''); 
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
+    const newMessage = {
       text: trimmedMessage,
-      sender: 'user',
-      name: currentUser.username,
-      userAvatarUrl: currentUser.profileImageUrl,
-      timestamp: new Date(),
+      senderId: currentUser.id,
+      senderUsername: currentUser.username || 'Anonymous',
+      senderAvatarUrl: currentUser.profileImageUrl || null,
+      timestamp: serverTimestamp(),
     };
-    setMessages((prevMessages) => [...prevMessages, userMessage]);
-    setInputValue('');
-    setLastMessageTime(Date.now());
 
-
-    setTimeout(() => {
-      const botResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        text: `Thanks, ${currentUser.username}! I've received your message. (Simulated)`,
-        sender: 'bot',
-        name: botName,
-        avatar: botAvatarPlaceholder,
-        botAvatarHint: botAvatarHint,
-        timestamp: new Date(),
-      };
-      setMessages((prevMessages) => [...prevMessages, botResponse]);
-    }, 1000);
+    try {
+      await addDoc(collection(db, CHAT_COLLECTION), newMessage);
+      setLastMessageTime(Date.now());
+    } catch (error) {
+      console.error("Error sending message: ", error);
+      toast({
+        title: "Send Error",
+        description: "Could not send your message. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
   
   const characterCount = MAX_CHAT_LENGTH - inputValue.length;
@@ -185,10 +229,6 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
             <Skull className="h-5 w-5 text-muted-foreground" />
             <h2 id="chat-sidebar-title" className="text-md font-semibold text-foreground">Degen Chat</h2>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="h-2.5 w-2.5 bg-primary rounded-full" />
-            <span className="text-sm font-medium text-primary">{MOCK_LIVE_USERS}</span>
-          </div>
           <Button
             type="button"
             size="icon"
@@ -200,55 +240,83 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
           </Button>
         </header>
 
-        <ScrollArea className="flex-grow p-4" ref={scrollAreaRef}>
-          <div className="space-y-4">
+        <ScrollArea className="flex-grow p-2 md:p-3" ref={scrollAreaRef}>
+          <div className="space-y-3">
             {messages.map((msg) => {
-              const isUserMessage = msg.sender === 'user';
+              const isUserMsg = msg.isCurrentUser;
+              let avatarSrc: string | undefined | null = msg.senderAvatarUrl;
+              let avatarHint = "user avatar";
+              let avatarFallbackText: React.ReactNode = msg.senderUsername ? msg.senderUsername.charAt(0).toUpperCase() : <UserIconLucide className="h-4 w-4" />;
+              
+              const badgeNumber = msg.senderId === 'bot' ? 'BOT' : (parseInt(msg.id.slice(-2), 16) % 90) + 10;
+              let badgeClasses = "text-xs px-1.5 py-0.5 rounded-sm font-medium ";
+              let avatarFallbackClasses = "";
+
+              if (msg.senderId === 'bot') {
+                avatarSrc = 'https://placehold.co/40x40/A050C3/FFFFFF.png';
+                avatarHint = "cartoon monkey";
+                avatarFallbackText = "B";
+                badgeClasses += "bg-accent text-accent-foreground";
+                avatarFallbackClasses = "bg-accent text-accent-foreground";
+              } else if (isUserMsg && currentUser) {
+                avatarSrc = currentUser.profileImageUrl;
+                badgeClasses += "bg-primary text-primary-foreground";
+                avatarFallbackClasses = "bg-primary text-primary-foreground";
+              } else {
+                // Other users
+                badgeClasses += "bg-secondary text-secondary-foreground";
+                avatarFallbackClasses = "bg-secondary text-secondary-foreground";
+              }
+
               return (
-                <div key={msg.id} className={`flex ${isUserMessage ? 'justify-end' : 'justify-start'}`}>
-                  <div className={cn('flex items-start gap-2.5 max-w-[80%]' , isUserMessage ? 'flex-row-reverse' : 'flex-row')}>
-                    <Avatar className="h-8 w-8 shrink-0">
-                      {isUserMessage && currentUser ? (
-                        <>
-                          {msg.userAvatarUrl ? (
-                            <AvatarImage src={msg.userAvatarUrl} alt={currentUser.username} data-ai-hint="user avatar"/>
-                          ) : null}
-                          <AvatarFallback className="bg-primary text-primary-foreground">
-                            {currentUser.username ? currentUser.username.charAt(0).toUpperCase() : <UserIconLucide className="h-4 w-4" />}
-                          </AvatarFallback>
-                        </>
-                      ) : ( 
-                        <>
-                          <AvatarImage src={msg.avatar} alt={msg.name} data-ai-hint={msg.botAvatarHint} />
-                          <AvatarFallback className="bg-accent text-accent-foreground">GN</AvatarFallback>
-                        </>
-                      )}
-                    </Avatar>
-                    <div className={cn('flex flex-col gap-0.5 min-w-0', isUserMessage ? 'items-end' : 'items-start')}>
-                      <span className="text-xs font-semibold text-foreground px-1">{msg.name}</span>
-                      <div
-                        className={cn(
-                          'p-3 rounded-lg text-sm font-normal break-all whitespace-normal', 
-                          isUserMessage
-                            ? 'bg-primary text-primary-foreground rounded-br-none' 
-                            : 'bg-secondary text-secondary-foreground rounded-bl-none'
-                        )}
-                      >
-                        {msg.text}
+                <div key={msg.id} className={cn(
+                  "flex w-full items-start gap-2.5 py-1.5 px-1.5 rounded-md", // Added rounded-md here for subtle item bg on hover
+                  isUserMsg ? 'flex-row-reverse' : '',
+                  // "hover:bg-muted/30" // Optional: subtle hover effect
+                )}>
+                  <Avatar className="h-8 w-8 shrink-0 mt-0.5">
+                    {avatarSrc ? (
+                      <AvatarImage src={avatarSrc} alt={msg.senderUsername} data-ai-hint={avatarHint} />
+                    ) : null}
+                    <AvatarFallback className={avatarFallbackClasses}>
+                      {avatarFallbackText}
+                    </AvatarFallback>
+                  </Avatar>
+
+                  <div className={cn(
+                    "flex flex-col flex-grow min-w-0",
+                    isUserMsg ? 'items-end' : 'items-start'
+                  )}>
+                    <div className="flex items-center w-full">
+                      <div className={cn(
+                        "flex items-center gap-1.5",
+                        isUserMsg ? 'flex-row-reverse space-x-reverse' : ''
+                      )}>
+                        <span className="text-sm font-semibold text-foreground">{msg.senderUsername}</span>
+                        <span className={badgeClasses}>
+                          {badgeNumber}
+                        </span>
                       </div>
-                       <div
-                        className={cn(
-                          'text-xs px-1 pt-0.5', 
-                          isUserMessage ? 'text-primary-foreground/70 text-right' : 'text-muted-foreground text-left'
-                        )}
-                      >
-                        {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </div>
+                      <span className="ml-auto pl-2 text-xs text-muted-foreground self-start whitespace-nowrap">
+                        {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+                      </span>
+                    </div>
+                    <div className={cn(
+                      "mt-0.5 text-sm text-foreground/90 break-words whitespace-pre-wrap",
+                      isUserMsg ? 'text-right' : 'text-left'
+                    )}>
+                      {msg.text}
                     </div>
                   </div>
                 </div>
               );
             })}
+             {(authIsLoading || (!currentUser && !authIsLoading && messages.length === 1 && messages[0].id === 'login-prompt-bot') ) && messages.length <=1 && (
+                null 
+            )}
+            {!authIsLoading && !currentUser && messages.length === 0 && (
+                 <p className="text-muted-foreground text-center py-4">Log in to see the chat.</p>
+            )}
           </div>
         </ScrollArea>
 
@@ -259,11 +327,11 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
                 type="text"
                 value={inputValue}
                 onChange={handleInputChange}
-                placeholder={authIsLoading ? "Checking login..." : (currentUser ? "Type Message Here..." : "Log in to chat...")}
+                placeholder={authIsLoading ? "Verifying login..." : (currentUser ? "Type Message Here..." : "Log in to chat...")}
                 className="flex-grow bg-input text-foreground placeholder:text-muted-foreground pr-10 rounded-md" 
                 aria-label="Chat message input"
                 disabled={authIsLoading || !currentUser}
-                maxLength={MAX_CHAT_LENGTH} // HTML5 attribute for visual feedback, JS handles the actual limit
+                maxLength={MAX_CHAT_LENGTH}
               />
               <Popover open={isEmojiPickerOpen} onOpenChange={setIsEmojiPickerOpen}>
                 <PopoverTrigger asChild>
@@ -325,4 +393,4 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
     </div>
   );
 }
-
+    
