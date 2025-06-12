@@ -12,9 +12,9 @@ import { useToast } from "@/hooks/use-toast";
 import { auth } from '@/lib/firebase'; // Import auth for verification status
 import { sendEmailVerification } from 'firebase/auth';
 
-const MAX_IMAGE_DIMENSION = 128; // Max width/height for resized profile picture (Reduced further)
-const IMAGE_QUALITY = 0.6; // JPEG quality (0.0 to 1.0) (Reduced further)
-const MAX_DATA_URL_LENGTH = 32000; // Approx 32KB limit for data URL string
+const MAX_IMAGE_DIMENSION = 96; // Max width/height for resized profile picture (Very small)
+const IMAGE_QUALITY = 0.7; // JPEG quality (0.0 to 1.0)
+const MAX_DATA_URL_LENGTH = 4000; // Extremely strict limit for data URL string (approx 4KB)
 
 export default function ProfilePage() {
   const { currentUser, logout, isLoading, updateProfilePicture } = useAuth();
@@ -38,8 +38,8 @@ export default function ProfilePage() {
         toast({ title: "Invalid File Type", description: "Please select an image file (JPEG, PNG, GIF, WebP).", variant: "destructive" });
         return;
       }
-      if (file.size > 5 * 1024 * 1024) { // 5MB limit before resizing attempt
-        toast({ title: "File Too Large", description: "Please select an image smaller than 5MB.", variant: "destructive" });
+      if (file.size > 2 * 1024 * 1024) { // 2MB limit before resizing attempt (reduced)
+        toast({ title: "File Too Large", description: "Please select an image smaller than 2MB.", variant: "destructive" });
         return;
       }
 
@@ -74,11 +74,11 @@ export default function ProfilePage() {
           const resizedImageUrl = canvas.toDataURL(mimeType, IMAGE_QUALITY);
 
           if (resizedImageUrl.length > MAX_DATA_URL_LENGTH) {
-             toast({ 
-               title: "Upload Failed", 
-               description: `The image data is too large for the profile picture even after compression (max ${MAX_DATA_URL_LENGTH/1000}KB). Please try a simpler or smaller image.`, 
+             toast({
+               title: "Upload Failed: Image Data Too Large",
+               description: `The image is still too large after compression (max ${MAX_DATA_URL_LENGTH / 1000}KB for data URI). Please use a very small/simple image or consider a dedicated image hosting solution.`,
                variant: "destructive",
-               duration: 7000,
+               duration: 10000, // Longer duration for this critical message
               });
              return;
           }
@@ -88,11 +88,11 @@ export default function ProfilePage() {
             toast({ title: "Profile Picture Updated", description: "Your new profile picture has been saved.", variant: "default" });
           } catch (error: any) {
             if ((error as any).code === 'auth/invalid-profile-attribute') {
-                toast({ 
-                  title: "Upload Failed", 
-                  description: "Firebase rejected the image data as too large. Please try a different, smaller, or simpler image.", 
+                toast({
+                  title: "Upload Failed by Firebase",
+                  description: "Firebase rejected the image data as too long. The image is too complex even after resizing. Please try a different, much smaller, or simpler image.",
                   variant: "destructive",
-                  duration: 7000, 
+                  duration: 10000,
                 });
             } else {
                 toast({ title: "Error Updating Profile", description: error.message || "Could not update profile picture.", variant: "destructive" });
@@ -232,3 +232,5 @@ export default function ProfilePage() {
     </div>
   );
 }
+
+    
