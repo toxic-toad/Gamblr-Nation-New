@@ -88,12 +88,12 @@ export default function ProfilePage() {
       if (!isEditingUsername) {
         setNewUsername(currentUser.username || '');
       }
-      // Update currentProfilePicUrl if the user's actual profileImageUrl changes
-      // This ensures the preview and selection logic use the latest saved avatar
       if (currentUser.profileImageUrl !== currentProfilePicUrl && !showSvgSelector) {
         setCurrentProfilePicUrl(currentUser.profileImageUrl || '');
         const existingSvg = predefinedSvgAvatars.find(avatar => currentUser.profileImageUrl === convertSvgStringToDataUrl(avatar.svgString));
         setSelectedSvgKey(existingSvg ? existingSvg.key : null);
+      } else if (!currentUser.profileImageUrl && !currentProfilePicUrl && !showSvgSelector) {
+        setSelectedSvgKey(null);
       }
     }
   }, [currentUser, isLoading, router, isEditingUsername, currentProfilePicUrl, showSvgSelector]);
@@ -171,7 +171,6 @@ export default function ProfilePage() {
     setSelectedSvgKey(svgKey);
     const svgData = predefinedSvgAvatars.find(s => s.key === svgKey);
     if (svgData) {
-      // Preview the selected SVG
       setCurrentProfilePicUrl(convertSvgStringToDataUrl(svgData.svgString));
     }
   };
@@ -192,7 +191,7 @@ export default function ProfilePage() {
         await updateProfilePicture(currentUser.id, dataUrl);
         toast({ title: "Avatar Updated", description: "Your new avatar has been saved.", variant: "default" });
         setShowSvgSelector(false);
-        // After saving, currentProfilePicUrl will be updated by the useEffect watching currentUser
+        // currentProfilePicUrl will be updated by useEffect watching currentUser.profileImageUrl
       } catch (error: any) {
         toast({ title: "Error Updating Avatar", description: error.message || "Could not update avatar.", variant: "destructive" });
       }
@@ -208,8 +207,6 @@ export default function ProfilePage() {
   }
   
   const isEmailVerified = auth.currentUser?.emailVerified ?? false;
-
-  // Use currentProfilePicUrl for avatar display to show preview from SVG selector or actual saved URL
   const avatarToDisplay = currentProfilePicUrl || '';
 
   return (
@@ -233,7 +230,6 @@ export default function ProfilePage() {
                 setShowSvgSelector(prev => {
                   const openingSelector = !prev;
                   if (openingSelector) {
-                    // When opening, reset preview to currently saved avatar and update selection
                     setCurrentProfilePicUrl(currentUser.profileImageUrl || '');
                     const existingSvg = predefinedSvgAvatars.find(avatar => currentUser.profileImageUrl === convertSvgStringToDataUrl(avatar.svgString));
                     setSelectedSvgKey(existingSvg ? existingSvg.key : null);
@@ -361,4 +357,5 @@ export default function ProfilePage() {
     </div>
   );
 }
+
     
