@@ -12,8 +12,9 @@ import { useToast } from "@/hooks/use-toast";
 import { auth } from '@/lib/firebase'; // Import auth for verification status
 import { sendEmailVerification } from 'firebase/auth';
 
-const MAX_IMAGE_DIMENSION = 256; // Max width/height for resized profile picture
-const IMAGE_QUALITY = 0.8; // JPEG quality (0.0 to 1.0)
+const MAX_IMAGE_DIMENSION = 192; // Max width/height for resized profile picture (reduced from 256)
+const IMAGE_QUALITY = 0.7; // JPEG quality (0.0 to 1.0) (reduced from 0.8)
+const MAX_DATA_URL_LENGTH = 500000; // Approx 500KB limit for data URL string
 
 export default function ProfilePage() {
   const { currentUser, logout, isLoading, updateProfilePicture } = useAuth();
@@ -69,11 +70,10 @@ export default function ProfilePage() {
           }
           ctx.drawImage(img, 0, 0, width, height);
           
-          // Use image/jpeg for better compression for photos, image/png for transparency
           const resizedImageUrl = canvas.toDataURL(file.type === 'image/png' ? 'image/png' : 'image/jpeg', IMAGE_QUALITY);
 
-          if (resizedImageUrl.length > 1000000) { // Approx 1MB limit for data URL for Firebase photoURL (conservative)
-             toast({ title: "Image Too Large After Resize", description: "The image is still too large after compression. Please try a smaller image.", variant: "destructive" });
+          if (resizedImageUrl.length > MAX_DATA_URL_LENGTH) {
+             toast({ title: "Image Too Large", description: "The image is too complex or large even after compression. Please try a smaller or simpler image.", variant: "destructive" });
              return;
           }
 
@@ -81,7 +81,12 @@ export default function ProfilePage() {
             await updateProfilePicture(currentUser.id, resizedImageUrl);
             toast({ title: "Profile Picture Updated", description: "Your new profile picture has been saved.", variant: "default" });
           } catch (error) {
-            toast({ title: "Error Updating Profile", description: (error as Error).message || "Could not update profile picture.", variant: "destructive" });
+            // Error handling for updateProfilePicture is now primarily in AuthContext, but can keep a fallback here
+            if ((error as Error).message && (error as Error).message.includes('auth/invalid-profile-attribute')) {
+                toast({ title: "Upload Failed", description: "The image data is still too large for the profile picture. Please try a different image.", variant: "destructive" });
+            } else {
+                toast({ title: "Error Updating Profile", description: (error as Error).message || "Could not update profile picture.", variant: "destructive" });
+            }
           }
         };
         img.onerror = () => {
