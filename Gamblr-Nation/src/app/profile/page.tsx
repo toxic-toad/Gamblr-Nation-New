@@ -5,15 +5,16 @@ import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { User, Mail, LogOut, ShieldCheck, Edit3, Save, XCircle, Palette, CheckSquare } from 'lucide-react';
+import { User, Mail, LogOut, ShieldCheck, Edit3, Save, XCircle, Palette, CheckSquare } from 'lucide-react'; // Added Palette, CheckSquare
 import { useRouter } from 'next/navigation';
-import { useEffect, useState, FormEvent } from 'react';
+import { useEffect, useState, FormEvent } from 'react'; // Removed useRef, ChangeEvent as they were for file input
 import { useToast } from "@/hooks/use-toast";
 import { auth } from '@/lib/firebase';
 import { sendEmailVerification } from 'firebase/auth';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 
+// Constants for username validation
 const MIN_USERNAME_LENGTH = 3;
 const MAX_USERNAME_LENGTH = 20;
 
@@ -51,15 +52,17 @@ const predefinedSvgAvatars = [
   },
 ];
 
+// Helper to convert SVG string to Base64 Data URL
 const convertSvgStringToDataUrl = (svgString: string) => {
-  if (typeof btoa === 'function') {
+  if (typeof btoa === 'function') { // Check if btoa is available (browser environment)
     return `data:image/svg+xml;base64,${btoa(svgString)}`;
   }
+  // Fallback for Node.js or environments where btoa might not be globally available
   if (typeof Buffer !== 'undefined') {
     return `data:image/svg+xml;base64,${Buffer.from(svgString).toString('base64')}`;
   }
   console.error("btoa and Buffer are not available to encode SVG to Base64.");
-  return '';
+  return ''; // Return empty or handle error as appropriate
 };
 
 
@@ -88,11 +91,14 @@ export default function ProfilePage() {
       if (!isEditingUsername) {
         setNewUsername(currentUser.username || '');
       }
+      // Sync currentProfilePicUrl with the actual saved URL if it changes and selector is not open
+      // Also, try to pre-select the SVG if the current image URL matches one of the predefined ones
       if (currentUser.profileImageUrl !== currentProfilePicUrl && !showSvgSelector) {
         setCurrentProfilePicUrl(currentUser.profileImageUrl || '');
         const existingSvg = predefinedSvgAvatars.find(avatar => currentUser.profileImageUrl === convertSvgStringToDataUrl(avatar.svgString));
         setSelectedSvgKey(existingSvg ? existingSvg.key : null);
       } else if (!currentUser.profileImageUrl && !currentProfilePicUrl && !showSvgSelector) {
+        // If user has no profile image and we have no local preview, clear selection
         setSelectedSvgKey(null);
       }
     }
@@ -171,6 +177,7 @@ export default function ProfilePage() {
     setSelectedSvgKey(svgKey);
     const svgData = predefinedSvgAvatars.find(s => s.key === svgKey);
     if (svgData) {
+      // Update the preview immediately
       setCurrentProfilePicUrl(convertSvgStringToDataUrl(svgData.svgString));
     }
   };
@@ -207,13 +214,14 @@ export default function ProfilePage() {
   }
   
   const isEmailVerified = auth.currentUser?.emailVerified ?? false;
+  // Use currentProfilePicUrl for the avatar display to show live preview from SVG selector
   const avatarToDisplay = currentProfilePicUrl || '';
 
   return (
     <div className="max-w-2xl mx-auto space-y-8">
       <Card className="glass-card">
         <CardHeader className="items-center text-center">
-          <div className="relative group">
+          <div className="relative group"> {/* Added group for visibility on hover if desired */}
             <Avatar className="h-24 w-24 mb-4 border-2 border-primary">
               {avatarToDisplay ? (
                 <AvatarImage src={avatarToDisplay} alt={currentUser.username || 'User'} data-ai-hint="user avatar"/>
@@ -222,6 +230,7 @@ export default function ProfilePage() {
                 {currentUser.username ? currentUser.username.charAt(0).toUpperCase() : (currentUser.email ? currentUser.email.charAt(0).toUpperCase() : '?')}
               </AvatarFallback>
             </Avatar>
+            {/* Palette Button to toggle SVG selector */}
             <Button 
               variant="outline" 
               size="icon" 
@@ -230,6 +239,7 @@ export default function ProfilePage() {
                 setShowSvgSelector(prev => {
                   const openingSelector = !prev;
                   if (openingSelector) {
+                    // When opening selector, set preview to current actual avatar & pre-select if it matches
                     setCurrentProfilePicUrl(currentUser.profileImageUrl || '');
                     const existingSvg = predefinedSvgAvatars.find(avatar => currentUser.profileImageUrl === convertSvgStringToDataUrl(avatar.svgString));
                     setSelectedSvgKey(existingSvg ? existingSvg.key : null);
@@ -285,6 +295,7 @@ export default function ProfilePage() {
           </div>
         </CardHeader>
 
+        {/* SVG Avatar Selector */}
         {showSvgSelector && (
           <CardContent className="border-t border-border pt-6">
             <h3 className="text-lg font-semibold text-accent mb-4 text-center">Choose Your Avatar</h3>
@@ -310,8 +321,8 @@ export default function ProfilePage() {
               </Button>
               <Button variant="ghost" onClick={() => {
                 setShowSvgSelector(false);
-                setSelectedSvgKey(null); 
-                setCurrentProfilePicUrl(currentUser.profileImageUrl || ''); 
+                setSelectedSvgKey(null); // Clear selection
+                setCurrentProfilePicUrl(currentUser.profileImageUrl || ''); // Reset preview to saved avatar
               }}>
                 Cancel
               </Button>
@@ -343,6 +354,9 @@ export default function ProfilePage() {
             <p className="text-foreground/80"><strong>Email:</strong> {currentUser.email}</p>
             <p className="text-foreground/80"><strong>User ID:</strong> <span className="text-xs">{currentUser.id}</span></p>
           </div>
+          
+          {/* The old button for file upload is INTENTIONALLY REMOVED HERE */}
+
         </CardContent>
         <CardFooter>
            <Button 
@@ -358,4 +372,3 @@ export default function ProfilePage() {
   );
 }
 
-    
