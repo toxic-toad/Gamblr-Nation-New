@@ -228,7 +228,7 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
                       <span className="text-xs font-semibold text-foreground px-1">{msg.name}</span>
                       <div
                         className={cn(
-                          'p-3 rounded-lg text-sm font-normal min-w-0 break-words', 
+                          'p-3 rounded-lg text-sm font-normal break-all', 
                           isUserMessage
                             ? 'bg-primary text-primary-foreground rounded-br-none' 
                             : 'bg-secondary text-secondary-foreground rounded-bl-none'
@@ -325,4 +325,3 @@ export default function ChatSidebar({ isOpen, onClose }: ChatSidebarProps) {
     </div>
   );
 }
-
