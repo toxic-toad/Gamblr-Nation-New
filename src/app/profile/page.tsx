@@ -38,7 +38,7 @@ export default function ProfilePage() {
         toast({ title: "Invalid File Type", description: "Please select an image file (JPEG, PNG, GIF, WebP).", variant: "destructive" });
         return;
       }
-      if (file.size > 2 * 1024 * 1024) { // 2MB limit before resizing attempt (reduced)
+      if (file.size > 2 * 1024 * 1024) { // 2MB limit before resizing attempt
         toast({ title: "File Too Large", description: "Please select an image smaller than 2MB.", variant: "destructive" });
         return;
       }
@@ -65,21 +65,22 @@ export default function ProfilePage() {
           canvas.height = height;
           const ctx = canvas.getContext('2d');
           if (!ctx) {
-            toast({ title: "Error Processing Image", description: "Could not get canvas context.", variant: "destructive" });
+            toast({ title: "Error Processing Image", description: "Could not get canvas context.", variant: "destructive", duration: 7000 });
             return;
           }
           ctx.drawImage(img, 0, 0, width, height);
           
-          const mimeType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
-          const resizedImageUrl = canvas.toDataURL(mimeType, IMAGE_QUALITY);
+          const resizedMimeType = 'image/jpeg'; // Always attempt JPEG for compression
+          const resizedImageUrl = canvas.toDataURL(resizedMimeType, IMAGE_QUALITY);
 
           if (resizedImageUrl.length > MAX_DATA_URL_LENGTH) {
              toast({
                title: "Upload Failed: Image Data Too Large",
-               description: `The image is still too large after compression (max ${MAX_DATA_URL_LENGTH / 1000}KB for data URI). Please use a very small/simple image or consider a dedicated image hosting solution.`,
+               description: `The image is too large even after aggressive compression (max ${MAX_DATA_URL_LENGTH / 1000}KB for profile picture). Please use a significantly smaller or simpler image file.`,
                variant: "destructive",
-               duration: 10000, // Longer duration for this critical message
+               duration: 10000, 
               });
+             if (fileInputRef.current) fileInputRef.current.value = "";
              return;
           }
 
@@ -95,20 +96,21 @@ export default function ProfilePage() {
                   duration: 10000,
                 });
             } else {
-                toast({ title: "Error Updating Profile", description: error.message || "Could not update profile picture.", variant: "destructive" });
+                toast({ title: "Error Updating Profile", description: error.message || "Could not update profile picture.", variant: "destructive", duration: 7000 });
             }
           }
         };
         img.onerror = () => {
-            toast({ title: "Error Loading Image", description: "Could not load the image for processing. It might be corrupted or an unsupported format.", variant: "destructive" });
+            toast({ title: "Error Loading Image", description: "Could not load the image for processing. It might be corrupted or an unsupported format.", variant: "destructive", duration: 7000 });
         }
         img.src = originalDataUrl;
       };
       reader.onerror = () => {
-        toast({ title: "Error Uploading", description: "Could not read the image file.", variant: "destructive" });
+        toast({ title: "Error Uploading", description: "Could not read the image file.", variant: "destructive", duration: 7000 });
       }
       reader.readAsDataURL(file);
     }
+    // Clear the file input after processing to allow re-selection of the same file
     if (fileInputRef.current) {
         fileInputRef.current.value = "";
     }
