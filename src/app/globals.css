@@ -1,0 +1,158 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 260 40% 9%; /* Dark Purple-Blue */
+    --foreground: 260 15% 92%; /* Light Cool Gray */
+
+    --muted: 260 40% 15%; /* Lighter version of background */
+    --muted-foreground: 260 15% 65%; /* Darker version of foreground */
+
+    --popover: 260 40% 11%; /* Slightly lighter than background */
+    --popover-foreground: 260 15% 92%; /* Same as foreground */
+
+    --card: 260 40% 13%; /* Slightly lighter than background */
+    --card-foreground: 260 15% 92%; /* Same as foreground */
+
+    --border: 260 35% 25%; /* Muted, but visible border */
+    --input: 260 40% 18%; /* Darker than card */
+
+    --primary: 180 70% 50%; /* Vibrant Cyan */
+    --primary-foreground: 180 70% 95%; /* Very light, for text on primary */
+
+    --secondary: 240 40% 40%; /* Subdued Blue */
+    --secondary-foreground: 240 40% 95%;
+    
+    --accent: 320 80% 60%; /* Bright Magenta/Pink */
+    --accent-foreground: 320 80% 95%; /* Very light, for text on accent */
+
+    --destructive: 0 70% 55%; /* Standard Red */
+    --destructive-foreground: 0 0% 98%;
+
+    --ring: 180 70% 60%; /* Based on primary */
+
+    --radius: 0.5rem;
+
+    /* Chart colors */
+    --chart-1: 180 70% 50%; /* Primary - Cyan */
+    --chart-2: 320 80% 60%; /* Accent - Magenta */
+    --chart-3: 210 70% 60%; /* A distinct brighter Blue */
+    --chart-4: 150 60% 50%; /* A vibrant Green */
+    --chart-5: 45 90% 55%; /* A bright Orange/Gold */
+
+    /* Sidebar specific colors */
+    --sidebar-background: 260 40% 12%;
+    --sidebar-foreground: 260 15% 92%;
+    --sidebar-primary: 180 70% 50%;
+    --sidebar-primary-foreground: 180 70% 95%;
+    --sidebar-accent: 320 80% 60%;
+    --sidebar-accent-foreground: 320 80% 95%;
+    --sidebar-border: 260 35% 25%;
+    --sidebar-ring: 180 70% 60%;
+  }
+
+  .dark {
+    --background: 260 40% 9%;
+    --foreground: 260 15% 92%;
+    --muted: 260 40% 15%;
+    --muted-foreground: 260 15% 65%;
+    --popover: 260 40% 11%;
+    --popover-foreground: 260 15% 92%;
+    --card: 260 40% 13%;
+    --card-foreground: 260 15% 92%;
+    --border: 260 35% 25%;
+    --input: 260 40% 18%;
+    --primary: 180 70% 50%;
+    --primary-foreground: 180 70% 95%;
+    --secondary: 240 40% 40%;
+    --secondary-foreground: 240 40% 95%;
+    --accent: 320 80% 60%;
+    --accent-foreground: 320 80% 95%;
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 0 0% 98%;
+    --ring: 180 70% 60%;
+    
+    /* Chart colors for dark theme */
+    --chart-1: 180 70% 50%;
+    --chart-2: 320 80% 60%;
+    --chart-3: 210 70% 60%;
+    --chart-4: 150 60% 50%;
+    --chart-5: 45 90% 55%;
+    
+    /* Sidebar specific colors for dark theme */
+    --sidebar-background: 260 40% 12%;
+    --sidebar-foreground: 260 15% 92%;
+    --sidebar-primary: 180 70% 50%;
+    --sidebar-primary-foreground: 180 70% 95%;
+    --sidebar-accent: 320 80% 60%;
+    --sidebar-accent-foreground: 320 80% 95%;
+    --sidebar-border: 260 35% 25%;
+    --sidebar-ring: 180 70% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    @apply font-body;
+    @apply break-words;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-headline;
+  }
+  /* Custom glow effect for text - REMOVED */
+  .text-glow-primary {
+    /* text-shadow: 0 0 8px hsl(var(--primary)), 0 0 12px hsl(var(--primary) / 0.7); */
+  }
+  .text-glow-accent {
+    /* text-shadow: 0 0 8px hsl(var(--accent)), 0 0 12px hsl(var(--accent) / 0.7); */
+  }
+   /* Custom glow effect for elements - REMOVED */
+  .element-glow-primary {
+    /* box-shadow: 0 0 15px 2px hsl(var(--primary) / 0.5), 0 0 25px 5px hsl(var(--primary) / 0.3); */
+  }
+  .element-glow-accent {
+    /* box-shadow: 0 0 15px 2px hsl(var(--accent) / 0.5), 0 0 25px 5px hsl(var(--accent) / 0.3); */
+  }
+  .element-glow-destructive {
+    /* box-shadow: 0 0 15px 2px hsl(var(--destructive) / 0.5), 0 0 25px 5px hsl(var(--destructive) / 0.3); */
+  }
+}
+
+/* For Daily Case Spin Animation */
+@keyframes spin {
+  0% { transform: rotateY(0deg); }
+  100% { transform: rotateY(360deg); }
+}
+.animate-spin-y-once {
+  animation: spin 1s ease-out forwards;
+}
+
+/* For Jackpot Counter Glowing */
+@keyframes pulse-glow {
+  0%, 100% {
+    text-shadow: 0 0 5px hsl(var(--accent)), 0 0 10px hsl(var(--accent)), 0 0 15px hsl(var(--accent)), 0 0 20px hsl(var(--accent) / 0.8);
+    opacity: 1;
+  }
+  50% {
+    text-shadow: 0 0 10px hsl(var(--accent)), 0 0 20px hsl(var(--accent)), 0 0 30px hsl(var(--accent) / 0.8), 0 0 40px hsl(var(--accent) / 0.6);
+    opacity: 0.8;
+  }
+}
+.jackpot-glow {
+  animation: pulse-glow 2s infinite ease-in-out;
+}
+
+/* Glassmorphism for cards */
+.glass-card {
+  @apply bg-card/60 backdrop-blur-lg border border-primary/30 rounded-lg shadow-xl shadow-primary/20;
+}
