@@ -12,9 +12,9 @@ import { useToast } from "@/hooks/use-toast";
 import { auth } from '@/lib/firebase'; // Import auth for verification status
 import { sendEmailVerification } from 'firebase/auth';
 
-const MAX_IMAGE_DIMENSION = 192; // Max width/height for resized profile picture (reduced from 256)
-const IMAGE_QUALITY = 0.7; // JPEG quality (0.0 to 1.0) (reduced from 0.8)
-const MAX_DATA_URL_LENGTH = 500000; // Approx 500KB limit for data URL string
+const MAX_IMAGE_DIMENSION = 192; // Max width/height for resized profile picture
+const IMAGE_QUALITY = 0.7; // JPEG quality (0.0 to 1.0)
+const MAX_DATA_URL_LENGTH = 32000; // Drastically reduced: Approx 32KB limit for data URL string
 
 export default function ProfilePage() {
   const { currentUser, logout, isLoading, updateProfilePicture } = useAuth();
@@ -35,7 +35,7 @@ export default function ProfilePage() {
     const file = event.target.files?.[0];
     if (file && currentUser) {
       if (!file.type.startsWith('image/')) {
-        toast({ title: "Invalid File Type", description: "Please select an image file.", variant: "destructive" });
+        toast({ title: "Invalid File Type", description: "Please select an image file (JPEG, PNG, GIF, WebP).", variant: "destructive" });
         return;
       }
       if (file.size > 5 * 1024 * 1024) { // 5MB limit before resizing attempt
@@ -70,10 +70,17 @@ export default function ProfilePage() {
           }
           ctx.drawImage(img, 0, 0, width, height);
           
-          const resizedImageUrl = canvas.toDataURL(file.type === 'image/png' ? 'image/png' : 'image/jpeg', IMAGE_QUALITY);
+          // Prefer JPEG for photos unless it's a PNG and we want to preserve transparency (though photoURL typically doesn't show transparency well)
+          const mimeType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+          const resizedImageUrl = canvas.toDataURL(mimeType, IMAGE_QUALITY);
 
           if (resizedImageUrl.length > MAX_DATA_URL_LENGTH) {
-             toast({ title: "Image Too Large", description: "The image is too complex or large even after compression. Please try a smaller or simpler image.", variant: "destructive" });
+             toast({ 
+               title: "Upload Failed", 
+               description: `The image data is too large for the profile picture even after compression (max ${MAX_DATA_URL_LENGTH/1000}KB). Please try a simpler or smaller image.`, 
+               variant: "destructive",
+               duration: 7000,
+              });
              return;
           }
 
@@ -81,16 +88,15 @@ export default function ProfilePage() {
             await updateProfilePicture(currentUser.id, resizedImageUrl);
             toast({ title: "Profile Picture Updated", description: "Your new profile picture has been saved.", variant: "default" });
           } catch (error) {
-            // Error handling for updateProfilePicture is now primarily in AuthContext, but can keep a fallback here
             if ((error as Error).message && (error as Error).message.includes('auth/invalid-profile-attribute')) {
-                toast({ title: "Upload Failed", description: "The image data is still too large for the profile picture. Please try a different image.", variant: "destructive" });
+                toast({ title: "Upload Failed", description: "Firebase rejected the image data as too large. Please try a different, smaller, or simpler image.", variant: "destructive", duration: 7000, });
             } else {
                 toast({ title: "Error Updating Profile", description: (error as Error).message || "Could not update profile picture.", variant: "destructive" });
             }
           }
         };
         img.onerror = () => {
-            toast({ title: "Error Loading Image", description: "Could not load the image for processing.", variant: "destructive" });
+            toast({ title: "Error Loading Image", description: "Could not load the image for processing. It might be corrupted or an unsupported format.", variant: "destructive" });
         }
         img.src = originalDataUrl;
       };
@@ -99,7 +105,6 @@ export default function ProfilePage() {
       }
       reader.readAsDataURL(file);
     }
-     // Reset file input to allow selecting the same file again if needed
     if (fileInputRef.current) {
         fileInputRef.current.value = "";
     }
@@ -223,4 +228,3 @@ export default function ProfilePage() {
     </div>
   );
 }
-
