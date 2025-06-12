@@ -5,27 +5,61 @@ import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { User, Mail, LogOut, Camera, ShieldCheck, Edit3, Save, XCircle } from 'lucide-react';
+import { User, Mail, LogOut, Camera, ShieldCheck, Edit3, Save, XCircle, CheckSquare, Palette } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, ChangeEvent, useState, FormEvent } from 'react';
+import { useEffect, useState, FormEvent } from 'react';
 import { useToast } from "@/hooks/use-toast";
 import { auth } from '@/lib/firebase';
 import { sendEmailVerification } from 'firebase/auth';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 
-const MAX_IMAGE_DIMENSION = 96; // Very small
-const IMAGE_QUALITY = 0.7; // Moderate JPEG quality
-const MAX_DATA_URL_LENGTH = 4000; // Extremely strict client-side check for data URI length
 const MIN_USERNAME_LENGTH = 3;
 const MAX_USERNAME_LENGTH = 20;
+
+// Predefined SVG Avatars
+const predefinedSvgAvatars = [
+  {
+    key: 'geometricBurst',
+    name: 'Geo Burst',
+    svgString: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="grad1" cx="50%" cy="50%" r="50%" fx="50%" fy="50%"><stop offset="0%" style="stop-color:hsl(var(--accent));stop-opacity:1" /><stop offset="100%" style="stop-color:hsl(var(--primary));stop-opacity:1" /></radialGradient></defs><circle cx="50" cy="50" r="45" fill="url(#grad1)" />${Array.from({ length: 12 }).map((_, i) => `<line x1="50" y1="50" x2="${50 + 45 * Math.cos(i * Math.PI / 6)}" y2="${50 + 45 * Math.sin(i * Math.PI / 6)}" stroke="hsl(var(--background))" stroke-width="2"/>`).join('')}<circle cx="50" cy="50" r="10" fill="hsl(var(--background))"/></svg>`,
+  },
+  {
+    key: 'wavyLines',
+    name: 'Wavy Lines',
+    svgString: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" fill="hsl(var(--primary))" /><path d="M0 20 Q 25 0, 50 20 T 100 20" stroke="hsl(var(--accent))" stroke-width="8" fill="none"/><path d="M0 50 Q 25 30, 50 50 T 100 50" stroke="hsl(var(--accent))" stroke-width="8" fill="none"/><path d="M0 80 Q 25 60, 50 80 T 100 80" stroke="hsl(var(--accent))" stroke-width="8" fill="none"/></svg>`,
+  },
+  {
+    key: 'pixelHeart',
+    name: 'Pixel Heart',
+    svgString: `<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" fill="hsl(var(--background))" /><path d="M9 2H10V3H11V4H12V5H13V6H14V7H15V9H16V14H15V16H14V17H13V18H12V19H11V20H10V21H9V22H8V23H7V24H6V25H5V26H4V27H3V28H2V29H7V28H8V27H9V26H10V25H11V24H12V23H13V22H14V21H15V20H16V19H17V18H18V17H19V16H20V14H19V9H18V7H17V6H16V5H15V4H14V3H13V2H12V1H9V2Z" fill="hsl(var(--accent))"/><path d="M22 2H21V3H20V4H19V5H18V6H17V7H16V9H15V14H16V16H17V17H18V18H19V19H20V20H21V21H22V22H23V23H24V24H25V25H26V26H27V27H28V28H29V29H24V28H23V27H22V26H21V25H20V24H19V23H18V22H17V21H16V20H15V19H14V18H13V17H12V16H11V14H12V9H13V7H14V6H15V5H16V4H17V3H18V2H19V1H22V2Z" fill="hsl(var(--primary))"/></svg>`,
+  },
+  {
+    key: 'controllerIcon',
+    name: 'Controller',
+    svgString: `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><path d="M50,16H14a8,8,0,0,0-8,8V38a8,8,0,0,0,8,8H26v6.59a1,1,0,0,0,1.71.7L32,49l4.29,4.29A1,1,0,0,0,38,52.59V46H50a8,8,0,0,0,8-8V24A8,8,0,0,0,50,16ZM20,38a4,4,0,1,1,4-4A4,4,0,0,1,20,38Zm8-8H24V26h4Zm8,8a4,4,0,1,1,4-4A4,4,0,0,1,36,38Zm8-8H40V26h4Z" fill="hsl(var(--primary))"/><circle cx="20" cy="34" r="2" fill="hsl(var(--accent))"/><circle cx="36" cy="34" r="2" fill="hsl(var(--accent))"/><rect x="26" y="28" width="4" height="4" fill="hsl(var(--accent))"/><rect x="42" y="28" width="4" height="4" fill="hsl(var(--accent))"/></svg>`,
+  },
+];
+
+const convertSvgStringToDataUrl = (svgString: string) => {
+  if (typeof btoa === 'function') {
+    return `data:image/svg+xml;base64,${btoa(svgString)}`;
+  }
+  // Fallback for environments where btoa might not be available (e.g., some Node.js contexts without polyfills)
+  // This is less likely in a modern browser environment for Next.js client-side code.
+  if (typeof Buffer !== 'undefined') {
+    return `data:image/svg+xml;base64,${Buffer.from(svgString).toString('base64')}`;
+  }
+  console.error("btoa and Buffer are not available to encode SVG to Base64.");
+  return '';
+};
 
 
 export default function ProfilePage() {
   const { currentUser, logout, isLoading, updateProfilePicture, updateUserDisplayName } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const [isVerificationEmailSent, setIsVerificationEmailSent] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   
@@ -33,103 +67,31 @@ export default function ProfilePage() {
   const [newUsername, setNewUsername] = useState(currentUser?.username || '');
   const [usernameError, setUsernameError] = useState('');
 
+  const [showSvgSelector, setShowSvgSelector] = useState(false);
+  const [selectedSvgKey, setSelectedSvgKey] = useState<string | null>(null);
+  const [currentProfilePicUrl, setCurrentProfilePicUrl] = useState(currentUser?.profileImageUrl || '');
+
 
   useEffect(() => {
     if (!isLoading && !currentUser) {
       router.push('/login');
     }
-    if (currentUser && !isEditingUsername) {
+    if (currentUser) {
+      if (!isEditingUsername) {
         setNewUsername(currentUser.username || '');
-    }
-  }, [currentUser, isLoading, router, isEditingUsername]);
-
-  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file && currentUser) {
-      if (!file.type.startsWith('image/')) {
-        toast({ title: "Invalid File Type", description: "Please select an image file (JPEG, PNG, GIF, WebP).", variant: "destructive" });
-        return;
       }
-      if (file.size > 2 * 1024 * 1024) { 
-        toast({ title: "File Too Large", description: "Please select an image smaller than 2MB.", variant: "destructive" });
-        return;
+      setCurrentProfilePicUrl(currentUser.profileImageUrl || ''); // Update on currentUser change
+      // If user has an SVG avatar, try to preselect it.
+      // This is a naive check; a more robust way would be to store the key.
+      const existingSvg = predefinedSvgAvatars.find(avatar => currentProfilePicUrl === convertSvgStringToDataUrl(avatar.svgString));
+      if (existingSvg) {
+        setSelectedSvgKey(existingSvg.key);
+      } else {
+        setSelectedSvgKey(null); // Reset if current avatar is not one of the predefined
       }
-
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const originalDataUrl = reader.result as string;
-        const img = new window.Image();
-        img.onload = async () => {
-          let { width, height } = img;
-          
-          if (width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION) {
-            if (width > height) {
-              height = Math.round((height * MAX_IMAGE_DIMENSION) / width);
-              width = MAX_IMAGE_DIMENSION;
-            } else {
-              width = Math.round((width * MAX_IMAGE_DIMENSION) / height);
-              height = MAX_IMAGE_DIMENSION;
-            }
-          }
-
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) {
-            toast({ title: "Error Processing Image", description: "Could not get canvas context.", variant: "destructive", duration: 7000 });
-            return;
-          }
-          ctx.drawImage(img, 0, 0, width, height);
-          
-          const resizedMimeType = 'image/jpeg'; // Always convert to JPEG for better compression
-          const resizedImageUrl = canvas.toDataURL(resizedMimeType, IMAGE_QUALITY);
-
-          if (resizedImageUrl.length > MAX_DATA_URL_LENGTH) {
-             toast({
-               title: "Upload Failed: Image Data Too Large",
-               description: `Even after resizing to ${MAX_IMAGE_DIMENSION}px, the image data is still too long (exceeds our internal limit of ${MAX_DATA_URL_LENGTH} characters). Please try a much simpler or smaller original image file.`,
-               variant: "destructive",
-               duration: 10000, 
-              });
-             if (fileInputRef.current) fileInputRef.current.value = "";
-             return;
-          }
-
-          try {
-            await updateProfilePicture(currentUser.id, resizedImageUrl);
-            toast({ title: "Profile Picture Updated", description: "Your new profile picture has been saved.", variant: "default" });
-          } catch (error: any) {
-            if ((error as any).code === 'auth/invalid-profile-attribute') {
-                toast({
-                  title: "Upload Failed by Firebase",
-                  description: "Firebase rejected the image data as too long. The image is too complex even after resizing. Please try a different, much smaller, or simpler image.",
-                  variant: "destructive",
-                  duration: 10000,
-                });
-            } else {
-                toast({ title: "Error Updating Profile", description: error.message || "Could not update profile picture.", variant: "destructive", duration: 7000 });
-            }
-          }
-        };
-        img.onerror = () => {
-            toast({ title: "Error Loading Image", description: "Could not load the image for processing. It might be corrupted or an unsupported format.", variant: "destructive", duration: 7000 });
-        }
-        img.src = originalDataUrl;
-      };
-      reader.onerror = () => {
-        toast({ title: "Error Uploading", description: "Could not read the image file.", variant: "destructive", duration: 7000 });
-      }
-      reader.readAsDataURL(file);
     }
-    if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-    }
-  };
+  }, [currentUser, isLoading, router, isEditingUsername, currentProfilePicUrl]);
 
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
-  };
 
   const handleSendVerificationEmail = async () => {
     if (auth.currentUser && !auth.currentUser.emailVerified) {
@@ -178,7 +140,7 @@ export default function ProfilePage() {
       await updateUserDisplayName(currentUser.id, trimmedUsername);
       toast({
         title: "Username Updated!",
-        description: `Your username is now ${trimmedUsername}. Note: Uniqueness across all users is not checked by this client-side update.`,
+        description: `Your username is now ${trimmedUsername}. Note: Uniqueness is not checked by this client-side update.`,
         variant: "default",
         duration: 7000,
       });
@@ -199,6 +161,36 @@ export default function ProfilePage() {
     setUsernameError('');
   };
 
+  const handleSelectSvg = (svgKey: string) => {
+    setSelectedSvgKey(svgKey);
+    const svgData = predefinedSvgAvatars.find(s => s.key === svgKey);
+    if (svgData) {
+      setCurrentProfilePicUrl(convertSvgStringToDataUrl(svgData.svgString));
+    }
+  };
+
+  const handleSaveAvatar = async () => {
+    if (!currentUser || !selectedSvgKey) {
+      toast({ title: "No Avatar Selected", description: "Please select an avatar to save.", variant: "destructive" });
+      return;
+    }
+    const svgData = predefinedSvgAvatars.find(s => s.key === selectedSvgKey);
+    if (svgData) {
+      const dataUrl = convertSvgStringToDataUrl(svgData.svgString);
+      if (!dataUrl) {
+         toast({ title: "Error Processing Avatar", description: "Could not convert SVG to data URL.", variant: "destructive" });
+         return;
+      }
+      try {
+        await updateProfilePicture(currentUser.id, dataUrl);
+        toast({ title: "Avatar Updated", description: "Your new avatar has been saved.", variant: "default" });
+        setShowSvgSelector(false);
+      } catch (error: any) {
+        toast({ title: "Error Updating Avatar", description: error.message || "Could not update avatar.", variant: "destructive" });
+      }
+    }
+  };
+
   if (isLoading || !currentUser) {
     return (
         <div className="flex items-center justify-center min-h-[calc(100vh-10rem)]">
@@ -209,26 +201,33 @@ export default function ProfilePage() {
   
   const isEmailVerified = auth.currentUser?.emailVerified ?? false;
 
+  const avatarToDisplay = selectedSvgKey && showSvgSelector 
+    ? convertSvgStringToDataUrl(predefinedSvgAvatars.find(s => s.key === selectedSvgKey)!.svgString)
+    : currentUser.profileImageUrl || '';
+
+
   return (
     <div className="max-w-2xl mx-auto space-y-8">
       <Card className="glass-card">
         <CardHeader className="items-center text-center">
-          <div className="relative">
+          <div className="relative group">
             <Avatar className="h-24 w-24 mb-4 border-2 border-primary">
-              {currentUser.profileImageUrl ? (
-                <AvatarImage src={currentUser.profileImageUrl} alt={currentUser.username || 'User'} data-ai-hint="user avatar"/>
+              {avatarToDisplay ? (
+                <AvatarImage src={avatarToDisplay} alt={currentUser.username || 'User'} data-ai-hint="user avatar"/>
               ) : null}
               <AvatarFallback className="text-4xl bg-primary text-primary-foreground">
                 {currentUser.username ? currentUser.username.charAt(0).toUpperCase() : (currentUser.email ? currentUser.email.charAt(0).toUpperCase() : '?')}
               </AvatarFallback>
             </Avatar>
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept="image/jpeg,image/png,image/gif,image/webp"
-              className="hidden"
-            />
+            <Button 
+              variant="outline" 
+              size="icon" 
+              className="absolute bottom-4 right-0 h-8 w-8 rounded-full bg-card/80 border-primary text-primary group-hover:opacity-100 opacity-60 transition-opacity"
+              onClick={() => setShowSvgSelector(prev => !prev)}
+              aria-label="Change profile picture"
+            >
+              <Palette className="h-4 w-4" />
+            </Button>
           </div>
           
           {!isEditingUsername ? (
@@ -272,7 +271,42 @@ export default function ProfilePage() {
             )}
           </div>
         </CardHeader>
-        <CardContent className="space-y-6">
+
+        {showSvgSelector && (
+          <CardContent className="border-t border-border pt-6">
+            <h3 className="text-lg font-semibold text-accent mb-4 text-center">Choose Your Avatar</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+              {predefinedSvgAvatars.map((avatar) => (
+                <Button
+                  key={avatar.key}
+                  variant="outline"
+                  className={cn(
+                    "h-24 w-full p-2 flex flex-col items-center justify-center gap-1 border-2 hover:border-accent",
+                    selectedSvgKey === avatar.key ? "border-accent ring-2 ring-accent" : "border-primary/30"
+                  )}
+                  onClick={() => handleSelectSvg(avatar.key)}
+                >
+                  <div className="h-16 w-16" dangerouslySetInnerHTML={{ __html: avatar.svgString }} />
+                  <span className="text-xs text-muted-foreground">{avatar.name}</span>
+                </Button>
+              ))}
+            </div>
+            <div className="flex justify-center gap-3">
+              <Button onClick={handleSaveAvatar} className="bg-green-500 hover:bg-green-600 text-white">
+                <CheckSquare className="mr-2 h-4 w-4" /> Save Avatar
+              </Button>
+              <Button variant="ghost" onClick={() => {
+                setShowSvgSelector(false);
+                setSelectedSvgKey(null); // Reset selection
+                setCurrentProfilePicUrl(currentUser.profileImageUrl || ''); // Revert to original
+              }}>
+                Cancel
+              </Button>
+            </div>
+          </CardContent>
+        )}
+
+        <CardContent className={cn("space-y-6", showSvgSelector && "border-t border-border mt-6 pt-6")}>
           {!isEmailVerified && (
             <Card className="bg-yellow-500/10 border-yellow-500/30 p-4">
               <CardDescription className="text-yellow-200 text-sm text-center">
@@ -296,15 +330,6 @@ export default function ProfilePage() {
             <p className="text-foreground/80"><strong>Email:</strong> {currentUser.email}</p>
             <p className="text-foreground/80"><strong>User ID:</strong> <span className="text-xs">{currentUser.id}</span></p>
           </div>
-          
-          <Button 
-            onClick={handleUploadClick} 
-            variant="outline" 
-            className="w-full border-primary text-primary hover:bg-primary/10 hover:text-primary"
-          >
-            <Camera className="mr-2 h-5 w-5" /> Change Profile Picture
-          </Button>
-
         </CardContent>
         <CardFooter>
            <Button 
@@ -319,5 +344,4 @@ export default function ProfilePage() {
     </div>
   );
 }
-
     
