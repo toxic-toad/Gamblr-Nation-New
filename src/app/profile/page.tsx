@@ -12,6 +12,9 @@ import { useToast } from "@/hooks/use-toast";
 import { auth } from '@/lib/firebase'; // Import auth for verification status
 import { sendEmailVerification } from 'firebase/auth';
 
+const MAX_IMAGE_DIMENSION = 256; // Max width/height for resized profile picture
+const IMAGE_QUALITY = 0.8; // JPEG quality (0.0 to 1.0)
+
 export default function ProfilePage() {
   const { currentUser, logout, isLoading, updateProfilePicture } = useAuth();
   const router = useRouter();
@@ -34,20 +37,66 @@ export default function ProfilePage() {
         toast({ title: "Invalid File Type", description: "Please select an image file.", variant: "destructive" });
         return;
       }
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit before resizing attempt
+        toast({ title: "File Too Large", description: "Please select an image smaller than 5MB.", variant: "destructive" });
+        return;
+      }
+
       const reader = new FileReader();
-      reader.onloadend = async () => {
-        const imageUrl = reader.result as string; // This is a data URL
-        try {
-          await updateProfilePicture(currentUser.id, imageUrl);
-          toast({ title: "Profile Picture Updated", description: "Your new profile picture has been saved.", variant: "default" });
-        } catch (error) {
-          toast({ title: "Error Updating Profile", description: (error as Error).message || "Could not update profile picture.", variant: "destructive" });
+      reader.onloadend = () => {
+        const originalDataUrl = reader.result as string;
+        const img = new window.Image();
+        img.onload = async () => {
+          let { width, height } = img;
+          
+          if (width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION) {
+            if (width > height) {
+              height = Math.round((height * MAX_IMAGE_DIMENSION) / width);
+              width = MAX_IMAGE_DIMENSION;
+            } else {
+              width = Math.round((width * MAX_IMAGE_DIMENSION) / height);
+              height = MAX_IMAGE_DIMENSION;
+            }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            toast({ title: "Error Processing Image", description: "Could not get canvas context.", variant: "destructive" });
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // Use image/jpeg for better compression for photos, image/png for transparency
+          const resizedImageUrl = canvas.toDataURL(file.type === 'image/png' ? 'image/png' : 'image/jpeg', IMAGE_QUALITY);
+
+          if (resizedImageUrl.length > 1000000) { // Approx 1MB limit for data URL for Firebase photoURL (conservative)
+             toast({ title: "Image Too Large After Resize", description: "The image is still too large after compression. Please try a smaller image.", variant: "destructive" });
+             return;
+          }
+
+          try {
+            await updateProfilePicture(currentUser.id, resizedImageUrl);
+            toast({ title: "Profile Picture Updated", description: "Your new profile picture has been saved.", variant: "default" });
+          } catch (error) {
+            toast({ title: "Error Updating Profile", description: (error as Error).message || "Could not update profile picture.", variant: "destructive" });
+          }
+        };
+        img.onerror = () => {
+            toast({ title: "Error Loading Image", description: "Could not load the image for processing.", variant: "destructive" });
         }
+        img.src = originalDataUrl;
       };
       reader.onerror = () => {
         toast({ title: "Error Uploading", description: "Could not read the image file.", variant: "destructive" });
       }
       reader.readAsDataURL(file);
+    }
+     // Reset file input to allow selecting the same file again if needed
+    if (fileInputRef.current) {
+        fileInputRef.current.value = "";
     }
   };
 
@@ -96,7 +145,7 @@ export default function ProfilePage() {
           <div className="relative">
             <Avatar className="h-24 w-24 mb-4 border-2 border-primary">
               {currentUser.profileImageUrl ? (
-                <AvatarImage src={currentUser.profileImageUrl} alt={currentUser.username || 'User'} />
+                <AvatarImage src={currentUser.profileImageUrl} alt={currentUser.username || 'User'} data-ai-hint="user avatar"/>
               ) : null}
               <AvatarFallback className="text-4xl bg-primary text-primary-foreground">
                 {currentUser.username ? currentUser.username.charAt(0).toUpperCase() : (currentUser.email ? currentUser.email.charAt(0).toUpperCase() : '?')}
@@ -106,7 +155,7 @@ export default function ProfilePage() {
               type="file"
               ref={fileInputRef}
               onChange={handleFileChange}
-              accept="image/*"
+              accept="image/jpeg,image/png,image/gif,image/webp"
               className="hidden"
             />
           </div>
@@ -169,3 +218,4 @@ export default function ProfilePage() {
     </div>
   );
 }
+
